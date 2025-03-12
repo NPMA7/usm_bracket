@@ -28,15 +28,12 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
     setError('');
     setRawDataDisplay(null);
     try {
-      console.log('Mengambil data peserta untuk turnamen ID:', tournamentId);
-      console.log('Menggunakan mode raw data:', useRawData);
       
       const url = useRawData 
         ? `/api/challonge/participants?tournamentId=${tournamentId}&raw=true`
         : `/api/challonge/participants?tournamentId=${tournamentId}`;
       
       const response = await fetch(url);
-      console.log('Status respons API:', response.status, response.statusText);
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -45,7 +42,6 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
       }
       
       const data = await response.json();
-      console.log('Data peserta dari API (raw):', data);
       
       // Jika menggunakan mode raw data, tampilkan data mentah
       if (useRawData) {
@@ -69,7 +65,6 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
           };
         });
         
-        console.log('Data yang diformat dari raw data:', formattedData);
         setParticipants(formattedData);
         setLoading(false);
         return;
@@ -83,10 +78,8 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
         let participantsArray = data;
         if (data && typeof data === 'object' && data.participants && Array.isArray(data.participants)) {
           participantsArray = data.participants;
-          console.log('Data peserta ditemukan dalam properti participants:', participantsArray);
         } else if (data && typeof data === 'object' && data.participant && Array.isArray(data.participant)) {
           participantsArray = data.participant;
-          console.log('Data peserta ditemukan dalam properti participant:', participantsArray);
         } else {
           throw new Error('Format data peserta tidak valid');
         }
@@ -110,7 +103,6 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
           // Coba periksa apakah item itu sendiri adalah participant
           if (item.id && (item.name || item.display_name)) {
             // Item ini sepertinya langsung objek participant
-            console.log('Item sepertinya langsung objek participant:', item);
             // Bungkus dalam format yang diharapkan
             item = { participant: item };
             return true;
@@ -150,7 +142,6 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
             return item;
           });
           
-          console.log('Mencoba menggunakan data langsung:', directParticipants);
           setParticipants(directParticipants);
           setLoading(false);
           return;
@@ -166,7 +157,6 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
         return seedA - seedB;
       });
       
-      console.log('Peserta yang diurutkan:', sortedParticipants);
       
       setParticipants(sortedParticipants);
     } catch (err) {
@@ -203,7 +193,6 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
       // Filter peserta yang valid
       const validParticipants = participants.filter(p => p.participant && p.participant.id);
       
-      console.log('Menyimpan posisi untuk peserta:', validParticipants);
       
       if (validParticipants.length === 0) {
         throw new Error('Tidak ada peserta valid untuk disimpan');
@@ -217,7 +206,6 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
           seed: p.participant.seed !== undefined ? p.participant.seed : 1 // Pastikan seed selalu ada
         };
         
-        console.log('Menyimpan data peserta:', payload);
         
         return fetch('/api/challonge/participants', {
           method: 'PUT',
@@ -235,7 +223,6 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
       });
       
       await Promise.all(savePromises);
-      console.log('Semua peserta berhasil disimpan');
       setSuccess('Posisi peserta berhasil disimpan');
       
       // Panggil callback onSuccess jika disediakan

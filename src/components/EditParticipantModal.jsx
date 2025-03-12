@@ -43,8 +43,7 @@ export default function EditParticipantModal({
         throw new Error('Data peserta tidak valid');
       }
 
-      console.log('Editing participant:', participant);
-      console.log('Tournament ID:', tournamentId);
+
 
       const participantId = participant.participant_id || participant.id;
 

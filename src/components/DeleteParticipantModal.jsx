@@ -21,9 +21,6 @@ export default function DeleteParticipantModal({
         throw new Error('Data peserta tidak valid');
       }
 
-      console.log('Deleting participant:', participant);
-      console.log('Participant ID:', participant.id);
-      console.log('Tournament ID:', tournamentId);
 
       const participantId = participant.participant_id || participant.id;
       

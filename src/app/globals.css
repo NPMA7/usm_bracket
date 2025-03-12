@@ -47,4 +47,30 @@ body {
       transform: translateY(-20px);
     }
   }
+}
+
+/* Custom Scrollbar untuk seluruh aplikasi */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #2b2b2b;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #f26522;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ff7b3d;
+}
+
+/* Untuk Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #f26522 #2b2b2b;
 } 

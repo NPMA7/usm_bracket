@@ -52,7 +52,6 @@ export default function TournamentBracket({ tournamentId }) {
         } else {
           // Jika bukan array dan tidak memiliki property matches, set sebagai array kosong
           setMatches([]);
-          console.log('Format respons matches tidak sesuai:', matchesData);
         }
         
         // Fetch participants

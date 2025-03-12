@@ -98,7 +98,7 @@ export async function GET(request) {
       );
     }
 
-    console.log(`Fetching participants for tournament ID: ${tournamentId}`);
+    (`Fetching participants for tournament ID: ${tournamentId}`);
 
     // Fetch participants first
     const participantsResponse = await axios.get(
@@ -110,11 +110,9 @@ export async function GET(request) {
       }
     );
 
-    console.log(`Received participants data from Challonge API. Status: ${participantsResponse.status}`);
     
     // Jika parameter raw=true, kembalikan data mentah dari API
     if (rawData) {
-      console.log('Returning raw participants data');
       return NextResponse.json(participantsResponse.data);
     }
 
@@ -128,13 +126,11 @@ export async function GET(request) {
       }
     );
 
-    console.log(`Received matches data from Challonge API. Status: ${matchesResponse.status}`);
 
     // Process the data to create standings
     const participants = participantsResponse.data;
     const matches = matchesResponse.data;
 
-    console.log(`Processing ${participants ? participants.length : 0} participants and ${matches ? matches.length : 0} matches`);
 
     // Periksa struktur data peserta
     if (!Array.isArray(participants)) {
@@ -152,7 +148,6 @@ export async function GET(request) {
         console.error('Invalid participant data structure:', p);
         // Coba gunakan p langsung jika sepertinya itu adalah objek participant
         if (p && typeof p === 'object' && (p.id || p.participant_id)) {
-          console.log('Using participant object directly:', p);
           p = { participant: p };
         } else {
           return null;
@@ -208,7 +203,6 @@ export async function GET(request) {
       };
     }).filter(p => p !== null); // Filter out any null entries
 
-    console.log(`Processed ${standings.length} valid participants`);
 
     // Urutkan berdasarkan seed
     const sortedStandings = standings.sort((a, b) => {
@@ -234,7 +228,6 @@ export async function PUT(request) {
     const body = await request.json();
     const { tournamentId, participantId, name, email, seed } = body;
 
-    console.log('PUT request body:', body);
 
     if (!tournamentId || !participantId) {
       return NextResponse.json(
@@ -249,7 +242,6 @@ export async function PUT(request) {
     if (email !== undefined) participant.email = email;
     if (seed !== undefined) participant.seed = seed;
 
-    console.log(`Updating participant ${participantId} in tournament ${tournamentId} with data:`, participant);
 
     const response = await axios.put(
       `${BASE_URL}/tournaments/${tournamentId}/participants/${participantId}.json`,
@@ -259,8 +251,6 @@ export async function PUT(request) {
       }
     );
 
-    console.log('Participant update response:', response.status, response.statusText);
-    console.log('Updated participant data:', response.data);
 
     return NextResponse.json(response.data);
   } catch (error) {
@@ -322,7 +312,7 @@ export async function DELETE(request) {
     const tournamentId = searchParams.get('tournamentId');
     const participantId = searchParams.get('participantId');
 
-    console.log('DELETE request params:', { tournamentId, participantId });
+    ('DELETE request params:', { tournamentId, participantId });
 
     if (!tournamentId || !participantId) {
       return NextResponse.json(

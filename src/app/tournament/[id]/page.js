@@ -3,8 +3,11 @@
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import BracketImage from "@/components/BracketImage";
-import StartTournamentButton from "@/components/StartTournamentButton";
 import EditParticipantPositionModal from "@/components/EditParticipantPositionModal";
+import TournamentHeader from "@/components/TournamentHeader";
+import TournamentInfoCard from "@/components/TournamentInfoCard";
+import FinalResultBox from "@/components/FinalResultBox";
+import StandingsTable from "@/components/StandingsTable";
 
 export default function TournamentDetail({ params }) {
   const unwrappedParams = use(params);
@@ -37,14 +40,11 @@ export default function TournamentDetail({ params }) {
     
     // Jika turnamen sudah selesai, tidak perlu interval refresh
     if (tournament?.tournament?.state === "complete") {
-      console.log("Turnamen sudah selesai, tidak perlu interval refresh");
       return;
     }
 
-    console.log("Membuat interval refresh data");
     // Buat interval untuk refresh standings setiap 10 detik
     const intervalId = setInterval(() => {
-      console.log("Refreshing standings data...");
       // Gunakan fungsi fetchStandingsQuiet untuk refresh tanpa loading indicator
       fetchStandingsQuiet(id);
       
@@ -54,7 +54,7 @@ export default function TournamentDetail({ params }) {
 
     // Cleanup function untuk membersihkan interval ketika komponen unmount
     return () => {
-      console.log("Membersihkan interval refresh");
+      ("Membersihkan interval refresh");
       clearInterval(intervalId);
     };
   }, [id, tournament?.tournament?.state]); // Jalankan kembali jika id atau status turnamen berubah
@@ -160,7 +160,6 @@ export default function TournamentDetail({ params }) {
       }
       const standingsData = await standingsResponse.json();
 
-      console.log("Data standings yang diterima:", standingsData);
 
       // Sort standings berdasarkan jumlah kemenangan (wins) dan kekalahan (losses)
       const sortedStandings = standingsData.sort((a, b) => {
@@ -403,208 +402,40 @@ export default function TournamentDetail({ params }) {
 
   return (
     <div className="min-h-screen bg-[#1a1a1a]">
-      {/* Header */}
-      <div className="bg-[#2b2b2b] border-b border-gray-700">
-        <div className="container mx-auto px-4 py-4">
-          <Link
-            href="/"
-            className="inline-flex items-center text-gray-400 hover:text-white transition-colors"
+    <div className="bg-[#2b2b2b] border-b border-gray-700">
+      <div className="container mx-auto px-4 py-4">
+        <Link
+              href={`/`}
+          className="inline-flex items-center text-gray-400 hover:text-white transition-colors"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5 mr-2"
+            viewBox="0 0 20 20"
+            fill="currentColor"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 mr-2"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z"
-                clipRule="evenodd"
-              />
-            </svg>
-            Kembali ke Daftar Turnamen
-          </Link>
-        </div>
+            <path
+              fillRule="evenodd"
+              d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z"
+              clipRule="evenodd"
+            />
+          </svg>
+          Kembali ke Daftar Turnamen
+        </Link>
       </div>
+    </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
-        {/* Tournament Info Card */}
-        <div className="bg-[#2b2b2b] rounded-lg shadow-xl mb-8">
-          <div className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <h1 className="text-3xl font-bold text-white mb-4">
-                  {tournament.tournament.name}
-                </h1>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="flex items-center text-gray-400">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 mr-2"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-                    </svg>
-                    <span>
-                      {tournament.tournament.participants_count || 0} Peserta
-                    </span>
-                  </div>
-                  <div className="flex items-center text-gray-400">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 mr-2"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    <span>
-                      Status:{" "}
-                      {tournament.tournament.state === "pending"
-                        ? "Belum Dimulai"
-                        : tournament.tournament.state === "underway"
-                        ? "Sedang Berlangsung"
-                        : tournament.tournament.state === "awaiting_review"
-                        ? "Menunggu Review"
-                        : tournament.tournament.state === "complete"
-                        ? "Selesai"
-                        : tournament.tournament.state}
-                    </span>
-                  </div>
-                  <div className="flex items-center text-gray-400">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 mr-2"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    <span>
-                      Dibuat{" "}
-                      {new Date(
-                        tournament.tournament.created_at
-                      ).toLocaleDateString("id-ID", {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              {!tournamentStarted && (
-                <StartTournamentButton
-                  tournamentId={id}
-                  onTournamentStarted={handleTournamentStarted}
-                  disabled={participantsCount < 2}
-                />
-              )}
-             
-            </div>
-          </div>
-        </div>
+        <TournamentInfoCard
+          tournament={tournament}
+          tournamentStarted={tournamentStarted}
+          participantsCount={participantsCount}
+          id={id}
+          onTournamentStarted={handleTournamentStarted}
+        />
 
-        {/* Final Result Box */}
         {tournament.tournament.state === "complete" && standings.length > 0 && (
-          <div className="bg-[#2b2b2b] rounded-lg shadow-xl mb-8">
-            <div className="p-6">
-              <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6 mr-2 text-[#f26522]"
-                  viewBox="0 0 16 16"
-                >
-                  <path
-                    d="M8 0L10.472 2.472L14 2.8944L11.416 4.8288L12.944 8L8 6.4L3.056 8L4.584 4.8288L2 2.8944L5.528 2.472L8 0Z"
-                    fill="currentColor"
-                  />
-                  <path
-                    d="M4 7.2V16H12V7.2C11.4154 7.4647 10.7701 7.6 10 7.6C9.22991 7.6 8.58459 7.4647 8 7.2C7.41541 7.4647 6.77009 7.6 6 7.6C5.22991 7.6 4.58459 7.4647 4 7.2Z"
-                    fill="currentColor"
-                  />
-                </svg>
-                Final Result
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {standings
-                  // Tidak perlu sorting lagi, gunakan urutan standings yang sudah ada
-                  .slice(0, 2)
-                  .map((participant, index) => {
-                    // Periksa apakah data menggunakan format baru (dengan objek participant)
-                    const participantData =
-                      participant.participant || participant;
-                    const participantId =
-                      participantData.id || participantData.participant_id;
-                    const name =
-                      participantData.name ||
-                      participantData.display_name ||
-                      "Unnamed";
-                    const wins = participantData.wins || 0;
-                    const losses = participantData.losses || 0;
-
-                    return (
-                      <div
-                        key={participantId}
-                        className={`p-6 rounded-lg flex items-center justify-between ${
-                          index === 0
-                            ? "bg-gradient-to-r from-[#f26522]/20 to-[#f26522]/5 border border-[#f26522]"
-                            : "bg-gradient-to-r from-gray-800/50 to-gray-800/30 border border-gray-700"
-                        }`}
-                      >
-                        <div className="flex items-center space-x-4">
-                          {index === 0 ? (
-                            <div className="w-12 h-12 flex items-center justify-center">
-                              <img
-                                src="https://assets.challonge.com/assets/icon-medal-first-9f45bab2a90d78bf720a8d196bf2dbbf260c4ba65a6e6a22c4e4c19813f7c9f2.svg"
-                                className="h-10 w-10"
-                                alt="Gold medal"
-                              />
-                            </div>
-                          ) : (
-                            <div className="w-12 h-12 flex items-center justify-center">
-                              <img
-                                src="https://assets.challonge.com/assets/icon-medal-second-db37f62deb0580bc0b59a95cb799e284012340d3225eb8c88c316482f872e98e.svg"
-                                className="h-10 w-10"
-                                alt="Silver medal"
-                              />
-                            </div>
-                          )}
-                          <div>
-                            <div className="text-lg font-bold text-white">
-                              {name}
-                            </div>
-                            <div className="text-sm text-gray-400 flex items-center mt-1">
-                              <span className="font-medium mr-2">
-                                {index === 0 ? "Champion" : "Runner-up"}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <span className="px-2 py-0.5 rounded bg-green-900/50 text-green-400 text-xs">
-                                  W: {wins}
-                                </span>
-                                <span className="px-2 py-0.5 rounded bg-red-900/50 text-red-400 text-xs">
-                                  L: {losses}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          </div>
+          <FinalResultBox standings={standings} />
         )}
 
         {/* Tournament Details */}
@@ -811,7 +642,7 @@ export default function TournamentDetail({ params }) {
                 </div>
 
                 {/* Standings Column */}
-                <div className="lg:w-96 ">
+                <div className="lg:w-96">
                   <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -821,7 +652,7 @@ export default function TournamentDetail({ params }) {
                     >
                       <path
                         fillRule="evenodd"
-                        d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+                        d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
                         clipRule="evenodd"
                       />
                     </svg>
@@ -833,74 +664,11 @@ export default function TournamentDetail({ params }) {
                     )}
                   </h2>
 
-                  <div className="bg-[#232323] rounded-lg  overflow-auto h-[90vh]">
-                    {isLoadingStandings ? (
-                      <div className="flex justify-center items-center h-32">
-                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#f26522] border-t-transparent"></div>
-                      </div>
-                    ) : standings.length === 0 ? (
-                      <div className="text-center py-8 text-gray-400">
-                        Belum ada data standings
-                      </div>
-                    ) : (
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-gray-700">
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">
-                              Rank
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">
-                              Participant Name
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">
-                              Match History
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-700">
-                          {standings.map((standing, index) => {
-                            // Periksa apakah data menggunakan format baru (dengan objek participant)
-                            const participantData =
-                              standing.participant || standing;
-                            const participantId =
-                              participantData.id ||
-                              participantData.participant_id;
-                            const name =
-                              participantData.name ||
-                              participantData.display_name ||
-                              "Unnamed";
-                            // Gunakan index + 1 sebagai rank, bukan dari data participant
-                            const rank = index + 1;
-                            const wins = participantData.wins || 0;
-                            const losses = participantData.losses || 0;
-
-                            return (
-                              <tr
-                                key={participantId}
-                                className="hover:bg-[#2d2d2d] transition-colors"
-                              >
-                                <td className="px-4 py-3 text-sm text-gray-300">
-                                  {rank}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-300">
-                                  {name}
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center gap-2">
-                                    <span className="px-2 py-1 bg-green-900/50 text-green-400 rounded text-xs font-medium">
-                                      W: {wins}
-                                    </span>
-                                    <span className="px-2 py-1 bg-red-900/50 text-red-400 rounded text-xs font-medium">
-                                      L: {losses}
-                                    </span>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    )}
+                  <div className="bg-[#232323] rounded-lg overflow-auto h-[90vh]">
+                    <StandingsTable
+                      standings={standings}
+                      isLoading={isLoadingStandings}
+                    />
                   </div>
                 </div>
               </div>
@@ -909,7 +677,6 @@ export default function TournamentDetail({ params }) {
         </div>
       </div>
 
-      {/* Modal Edit Posisi Peserta */}
       <EditParticipantPositionModal
         isOpen={showEditPositionModal}
         onClose={() => setShowEditPositionModal(false)}

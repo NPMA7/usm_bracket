@@ -34,13 +34,52 @@ export async function POST(request) {
 // Fungsi untuk mendapatkan daftar turnamen
 export async function GET() {
   try {
+    // Ambil daftar turnamen dengan data peserta
     const response = await axios.get(`${BASE_URL}/tournaments.json`, {
       params: {
         api_key: API_KEY,
+        include_participants: 1,
+        state: 'all'
       }
     });
 
-    return NextResponse.json(response.data);
+    const tournaments = response.data;
+
+    // Proses setiap turnamen untuk mendapatkan pemenang
+    for (const tournament of tournaments) {
+      if (tournament.tournament.state === "complete") {
+        try {
+          // Ambil detail turnamen spesifik dengan data peserta
+          const detailResponse = await axios.get(
+            `${BASE_URL}/tournaments/${tournament.tournament.id}.json`,
+            {
+              params: {
+                api_key: API_KEY,
+                include_participants: 1
+              }
+            }
+          );
+
+          const tournamentDetail = detailResponse.data.tournament;
+          
+          // Cari peserta dengan final_rank = 1 (Juara 1)
+          if (tournamentDetail.participants) {
+            const winner = tournamentDetail.participants.find(
+              p => p.participant.final_rank === 1
+            );
+
+            if (winner) {
+              tournament.tournament.winner_name = winner.participant.name || winner.participant.display_name;
+              (`Found winner for tournament ${tournament.tournament.id}:`, tournament.tournament.winner_name);
+            }
+          }
+        } catch (detailError) {
+          console.error(`Error fetching details for tournament ${tournament.tournament.id}:`, detailError);
+        }
+      }
+    }
+
+    return NextResponse.json(tournaments);
   } catch (error) {
     console.error('Error fetching tournaments:', error.response?.data || error.message);
     return NextResponse.json(
