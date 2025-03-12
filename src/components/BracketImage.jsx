@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ParticipantManager from './ParticipantManager';
 
-export default function BracketImage({ tournamentId }) {
+export default function BracketImage({ tournamentId, refreshKey }) {
   const [bracketUrls, setBracketUrls] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -20,6 +20,20 @@ export default function BracketImage({ tournamentId }) {
   useEffect(() => {
     fetchBracketImage();
   }, [tournamentId]);
+
+  // Refresh bracket ketika key berubah
+  useEffect(() => {
+    if (moduleRefreshKey > 0) {
+      fetchBracketImage();
+    }
+  }, [moduleRefreshKey]);
+
+  // Refresh bracket ketika refreshKey berubah
+  // useEffect(() => {
+  //   if (refreshKey > 0) {
+  //     fetchBracketImage();
+  //   }
+  // }, [refreshKey]);
 
   const fetchBracketImage = async () => {
     setIsLoading(true);
@@ -107,8 +121,8 @@ export default function BracketImage({ tournamentId }) {
 
   const getChallongeModuleUrl = () => {
     if (!challongeUrl) return '';
-    // Tambahkan parameter timestamp untuk mencegah caching
-    return `https://challonge.com/${challongeUrl}/module?t=${Date.now()}`;
+    // Hapus parameter timestamp untuk mencegah refresh otomatis
+    return `https://challonge.com/${challongeUrl}/module`;
   };
 
   const shouldShowBracketImage = () => {
@@ -170,41 +184,7 @@ export default function BracketImage({ tournamentId }) {
         </div>
       )}
 
-      {isAdmin && !tournamentStarted && participants.length >= 2 && (
-        <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-4">
-          <div className="flex flex-col">
-            <div className="flex items-center mb-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-              </svg>
-              <span className="font-bold">Pengaturan Bracket</span>
-            </div>
-            <p className="mb-2">
-              Anda dapat mengatur posisi tim atau melakukan shuffle peserta langsung di aplikasi ini.
-            </p>
-            <div className="flex flex-wrap gap-2 mt-2">
-              <button
-                onClick={toggleParticipantManager}
-                className="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded inline-flex items-center"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-                </svg>
-                {showParticipantManager ? 'Sembunyikan Pengaturan Peserta' : 'Kelola Posisi & Shuffle Tim'}
-              </button>
-              <button
-                onClick={refreshBracket}
-                className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded inline-flex items-center"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                </svg>
-                Refresh Bracket
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      
 
       {showParticipantManager && isAdmin && !tournamentStarted && (
         <div className="mb-6">
@@ -285,20 +265,7 @@ export default function BracketImage({ tournamentId }) {
                 onLoad={handleModuleIframeLoad}
                 onError={() => setIframeError(true)}
               />
-              {!tournamentStarted && (
-                <div className="mt-4 bg-gray-100 border border-gray-300 text-gray-700 px-4 py-3 rounded">
-                  <p className="font-bold mb-2">Keterbatasan Tampilan Bracket</p>
-                  <p>Tampilan bracket ini memiliki keterbatasan:</p>
-                  <ul className="list-disc ml-5 mt-2">
-                    <li>Tidak dapat memindahkan posisi tim secara langsung</li>
-                    <li>Tidak dapat melakukan shuffle tim</li>
-                    <li>Fitur administratif lainnya tidak tersedia</li>
-                  </ul>
-                  <p className="mt-2">
-                    Untuk mengatur posisi tim dan melakukan shuffle, gunakan tombol "Kelola Posisi & Shuffle Tim" di atas.
-                  </p>
-                </div>
-              )}
+             
             </>
           )}
         </div>

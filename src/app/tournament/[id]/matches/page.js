@@ -23,6 +23,8 @@ export default function TournamentMatches(props) {
   const [updateError, setUpdateError] = useState("");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -110,6 +112,11 @@ export default function TournamentMatches(props) {
   }, [id, refreshTrigger, isLoading]);
 
   const getParticipantName = (id) => {
+    // Jika ID tidak ada (null atau undefined), kembalikan "TBD"
+    if (id === null || id === undefined) {
+      return "TBD";
+    }
+
     if (!Array.isArray(participants)) {
       console.log("Participants is not an array:", participants);
       return "Loading...";
@@ -117,13 +124,30 @@ export default function TournamentMatches(props) {
 
     // Log untuk debugging
     console.log("Looking for participant ID:", id);
+    console.log("Participants data structure:", participants);
 
-    const participant = participants.find((p) => p.participant_id === id);
+    // Cek apakah data menggunakan format baru (dengan objek participant)
+    const participant = participants.find(p => {
+      // Jika menggunakan format baru (dengan objek participant)
+      if (p.participant) {
+        return p.participant.id === id;
+      }
+      // Jika menggunakan format lama
+      return p.participant_id === id || p.id === id;
+    });
 
     // Log hasil pencarian
     console.log("Found participant:", participant);
 
     if (!participant) return "Unknown";
+    
+    // Ekstrak nama dari struktur data yang sesuai
+    if (participant.participant) {
+      // Format baru
+      return participant.participant.name || participant.participant.display_name || "Unknown";
+    }
+    
+    // Format lama
     return participant.name || "Unknown";
   };
 
@@ -316,13 +340,55 @@ export default function TournamentMatches(props) {
         throw new Error("Gagal menyelesaikan turnamen");
       }
 
-      // Refresh halaman
-      window.location.reload();
+      // Arahkan ke halaman detail turnamen
+      window.location.href = `/tournament/${id}`;
     } catch (err) {
       setError(err.message);
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Fungsi untuk memfilter pertandingan berdasarkan pencarian dan status
+  const filteredMatches = () => {
+    return [...matches].filter(match => {
+      // Filter berdasarkan status
+      if (statusFilter !== "all" && match.match.state !== statusFilter) {
+        return false;
+      }
+      
+      // Jika tidak ada pencarian, kembalikan hasil filter status saja
+      if (!searchTerm.trim()) {
+        return true;
+      }
+      
+      // Filter berdasarkan nama tim
+      const player1Id = match.match.player1_id;
+      const player2Id = match.match.player2_id;
+      
+      const isPlayer1Valid = player1Id && player1Id !== 0;
+      const isPlayer2Valid = player2Id && player2Id !== 0;
+      
+      const player1Name = isPlayer1Valid ? getParticipantName(player1Id) : "TBD";
+      const player2Name = isPlayer2Valid ? getParticipantName(player2Id) : "TBD";
+      
+      const searchTermLower = searchTerm.toLowerCase();
+      
+      return player1Name.toLowerCase().includes(searchTermLower) || 
+             player2Name.toLowerCase().includes(searchTermLower);
+    }).sort((a, b) => {
+      // Prioritaskan status berdasarkan urutan: "open", "complete", lainnya
+      if (a.match.state === "open" && b.match.state !== "open") return -1;
+      if (a.match.state !== "open" && b.match.state === "open") return 1;
+      
+      // Jika keduanya bukan "open", prioritaskan "complete"
+      if (a.match.state === "complete" && b.match.state !== "complete") return -1;
+      if (a.match.state !== "complete" && b.match.state === "complete") return 1;
+      
+      // Jika keduanya sama statusnya, urutkan berdasarkan ronde dan nomor match
+      if (a.match.round !== b.match.round) return a.match.round - b.match.round;
+      return a.match.suggested_play_order - b.match.suggested_play_order;
+    });
   };
 
   if (isLoading) {
@@ -461,7 +527,10 @@ export default function TournamentMatches(props) {
                   <div className="animate-spin rounded-full h-6 w-6 border-2 border-[#f26522] border-t-transparent"></div>
                 )}
                 {(tournament.tournament.state === "underway" ||
-                  tournament.tournament.state === "awaiting_review") && (
+                  tournament.tournament.state === "awaiting_review") && 
+                  // Periksa apakah semua pertandingan sudah selesai
+                  matches.length > 0 && 
+                  matches.every(match => match.match.state === "complete") && (
                   <button
                     onClick={handleFinalizeTournament}
                     disabled={isProcessing}
@@ -483,6 +552,27 @@ export default function TournamentMatches(props) {
                       ? "Menyelesaikan Turnamen..."
                       : "Selesaikan Turnamen"}
                   </button>
+                )}
+                {(tournament.tournament.state === "underway" ||
+                  tournament.tournament.state === "awaiting_review") && 
+                  // Tampilkan pesan jika masih ada pertandingan yang belum selesai
+                  matches.length > 0 && 
+                  !matches.every(match => match.match.state === "complete") && (
+                  <div className="text-yellow-400 text-sm flex items-center">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5 mr-2"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    Selesaikan semua pertandingan untuk menyelesaikan turnamen
+                  </div>
                 )}
               </div>
             </div>
@@ -513,31 +603,43 @@ export default function TournamentMatches(props) {
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {participants
-                    .sort(
-                      (a, b) => (a.final_rank || 999) - (b.final_rank || 999)
-                    )
+                    .sort((a, b) => {
+                      // Periksa apakah data menggunakan format baru (dengan objek participant)
+                      const rankA = a.participant 
+                        ? (a.participant.final_rank || a.participant.rank || 999) 
+                        : (a.final_rank || a.rank || 999);
+                      const rankB = b.participant 
+                        ? (b.participant.final_rank || b.participant.rank || 999) 
+                        : (b.final_rank || b.rank || 999);
+                      return rankA - rankB;
+                    })
                     .slice(0, 2)
                     .map((participant, index) => {
+                      // Ekstrak data peserta dari struktur yang sesuai
+                      const participantData = participant.participant || participant;
+                      const participantId = participantData.id || participantData.participant_id;
+                      const name = participantData.name || participantData.display_name || 'Unnamed';
+                      
                       const matchesForParticipant = matches.filter(
                         (m) =>
-                          m.match.winner_id === participant.participant_id ||
-                          m.match.loser_id === participant.participant_id
+                          m.match.winner_id === participantId ||
+                          m.match.loser_id === participantId
                       );
 
                       const wins = matchesForParticipant.filter(
-                        (m) => m.match.winner_id === participant.participant_id
+                        (m) => m.match.winner_id === participantId
                       ).length;
 
                       const losses = matchesForParticipant.filter(
-                        (m) => m.match.loser_id === participant.participant_id
+                        (m) => m.match.loser_id === participantId
                       ).length;
 
                       return (
                         <div
-                          key={participant.participant_id}
+                          key={participantId}
                           className={`p-6 rounded-lg flex items-center justify-between ${
                             index === 0
-                              ? "bg-gradient-to-r from-[#f26522]/20 to-[#f26522]/5 border border-[#f26522]"
+                              ? "bg-gradient-to-r from-[#f26522]/20 to-[#f26522]/5 border border-[#f26522]" 
                               : "bg-gradient-to-r from-gray-800/50 to-gray-800/30 border border-gray-700"
                           }`}
                         >
@@ -561,15 +663,20 @@ export default function TournamentMatches(props) {
                             )}
                             <div>
                               <div className="text-lg font-bold text-white">
-                                {participant.name}
+                                {name}
                               </div>
                               <div className="text-sm text-gray-400 flex items-center mt-1">
                                 <span className="font-medium mr-2">
                                   {index === 0 ? "Champion" : "Runner-up"}
                                 </span>
-                                <span className="px-2 py-0.5 rounded-full bg-gray-700/50 text-xs">
-                                  W/L: {wins}-{losses}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2 py-0.5 rounded bg-green-900/50 text-green-400 text-xs">
+                                    W: {wins}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded bg-red-900/50 text-red-400 text-xs">
+                                    L: {losses}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -582,7 +689,7 @@ export default function TournamentMatches(props) {
           )}
 
         {/* Matches List */}
-        <div className="bg-[#2b2b2b] rounded-lg shadow-xl">
+        <div className="bg-[#2b2b2b] rounded-lg shadow-xl overflow-y-auto h-[90vh] ">
           <div className="p-6">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-white flex items-center">
@@ -597,6 +704,45 @@ export default function TournamentMatches(props) {
                 Daftar Pertandingan
               </h2>
             </div>
+
+            {/* Search and Filter */}
+            <div className="mb-6 flex flex-col md:flex-row gap-4">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  className="bg-[#3b3b3b] border border-gray-600 text-white rounded-lg block w-full pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#f26522] focus:border-transparent"
+                  placeholder="Cari berdasarkan nama tim..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <div className="md:w-64">
+                <select
+                  className="bg-[#3b3b3b] border border-gray-600 text-white rounded-lg block w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#f26522] focus:border-transparent"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="all">Semua Status</option>
+                  <option value="open">Open</option>
+                  <option value="complete">Complete</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Match Count Info */}
+            {matches.length > 0 && (
+              <div className="mb-4 text-sm text-gray-400">
+                Menampilkan {filteredMatches().length} dari {matches.length} pertandingan
+                {searchTerm && <span> (filter: "{searchTerm}")</span>}
+                {statusFilter !== "all" && <span> (status: "{statusFilter}")</span>}
+              </div>
+            )}
 
             {matches.length === 0 ? (
               <div className="bg-[#3b3b3b] rounded-lg p-8 text-center">
@@ -615,6 +761,30 @@ export default function TournamentMatches(props) {
                 <p className="text-gray-400">
                   Belum ada pertandingan yang dijadwalkan.
                 </p>
+              </div>
+            ) : filteredMatches().length === 0 ? (
+              <div className="bg-[#3b3b3b] rounded-lg p-8 text-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-12 w-12 mx-auto mb-4 text-gray-500"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <p className="text-gray-400">
+                  Tidak ada pertandingan yang cocok dengan pencarian Anda.
+                </p>
+                <button 
+                  onClick={() => {setSearchTerm(""); setStatusFilter("all");}}
+                  className="mt-4 px-4 py-2 bg-[#f26522] text-white rounded-lg hover:bg-[#ff7b3d] transition-colors"
+                >
+                  Reset Pencarian
+                </button>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -666,16 +836,26 @@ export default function TournamentMatches(props) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-700">
-                    {matches.map((match, index) => {
-                      const player1Name = getParticipantName(
-                        match.match.player1_id
-                      );
-                      const player2Name = getParticipantName(
-                        match.match.player2_id
-                      );
-                      const isTBD =
-                        player1Name === "TBD" || player2Name === "TBD";
+                    {/* Urutkan matches agar yang status "open" ditampilkan terlebih dahulu */}
+                    {filteredMatches().map((match, index) => {
+                      const player1Id = match.match.player1_id;
+                      const player2Id = match.match.player2_id;
+                      
+                      // Periksa apakah ID peserta valid (bukan 0, null, atau undefined)
+                      const isPlayer1Valid = player1Id && player1Id !== 0;
+                      const isPlayer2Valid = player2Id && player2Id !== 0;
+                      
+                      const player1Name = isPlayer1Valid ? getParticipantName(player1Id) : "TBD";
+                      const player2Name = isPlayer2Valid ? getParticipantName(player2Id) : "TBD";
+                      
+                      const isTBD = player1Name === "TBD" || player2Name === "TBD";
                       const isComplete = match.match.state === "complete";
+                      const isOpen = match.match.state === "open";
+                      
+                      // Pertandingan dapat diedit jika:
+                      // 1. Status pertandingan adalah "open" (selalu diutamakan)
+                      // 2. Atau jika tidak TBD dan turnamen belum selesai
+                      const canEditMatch = isOpen || (!isTBD && tournament.tournament.state !== "complete");
 
                       return (
                         <tr
@@ -683,7 +863,7 @@ export default function TournamentMatches(props) {
                           className="hover:bg-[#333333] transition-colors"
                         >
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                            {index + 1}
+                            {match.match.suggested_play_order || index + 1}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-300">
@@ -696,7 +876,9 @@ export default function TournamentMatches(props) {
                             className={`px-6 py-4 whitespace-nowrap text-sm ${
                               match.match.player1_id === match.match.winner_id
                                 ? "text-green-400 font-medium"
-                                : "text-gray-300"
+                                : player1Name === "TBD" 
+                                  ? "text-blue-400 font-medium"
+                                  : "text-gray-300"
                             }`}
                           >
                             {player1Name}
@@ -705,7 +887,9 @@ export default function TournamentMatches(props) {
                             className={`px-6 py-4 whitespace-nowrap text-sm ${
                               match.match.player2_id === match.match.winner_id
                                 ? "text-green-400 font-medium"
-                                : "text-gray-300"
+                                : player2Name === "TBD" 
+                                  ? "text-blue-400 font-medium"
+                                  : "text-gray-300"
                             }`}
                           >
                             {player2Name}
@@ -715,7 +899,9 @@ export default function TournamentMatches(props) {
                               className={`px-3 py-1 rounded-full text-xs font-medium ${
                                 isComplete
                                   ? "bg-green-900/50 text-green-400"
-                                  : "bg-yellow-900/50 text-yellow-400"
+                                  : isOpen
+                                    ? "bg-yellow-900/50 text-yellow-400"
+                                    : "bg-blue-900/50 text-blue-400"
                               }`}
                             >
                               {match.match.state}
@@ -728,15 +914,13 @@ export default function TournamentMatches(props) {
                             <div className="flex items-center space-x-3">
                               <button
                                 onClick={() => handleSelectMatch(match)}
-                                disabled={
-                                  isTBD ||
-                                  tournament.tournament.state === "complete"
-                                }
+                                disabled={!canEditMatch}
                                 className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                                  isTBD ||
-                                  tournament.tournament.state === "complete"
+                                  !canEditMatch
                                     ? "bg-gray-700 text-gray-400 cursor-not-allowed"
-                                    : "bg-blue-600 text-white hover:bg-blue-700"
+                                    : isTBD
+                                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                                      : "bg-blue-600 text-white hover:bg-blue-700"
                                 }`}
                               >
                                 {isTBD ? (
@@ -755,8 +939,7 @@ export default function TournamentMatches(props) {
                                     </svg>
                                     Menunggu Tim
                                   </>
-                                ) : tournament.tournament.state ===
-                                  "complete" ? (
+                                ) : tournament.tournament.state === "complete" ? (
                                   <>
                                     <svg
                                       xmlns="http://www.w3.org/2000/svg"
@@ -801,7 +984,7 @@ export default function TournamentMatches(props) {
                                     >
                                       <path
                                         fillRule="evenodd"
-                                        d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
+                                        d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
                                         clipRule="evenodd"
                                       />
                                     </svg>
@@ -827,7 +1010,7 @@ export default function TournamentMatches(props) {
           <div className="bg-[#2b2b2b] rounded-lg shadow-xl max-w-lg w-full">
             <div className="p-6">
               <div className="flex justify-between items-center border-b border-gray-600 pb-4 mb-6">
-                <div className="flex space-x-4">
+                <div className="flex space-x-4 mb-4">
                   <button className="text-white px-4 py-2 font-medium border-b-2 border-[#f26522]">
                     Report scores
                   </button>
@@ -905,9 +1088,9 @@ export default function TournamentMatches(props) {
                           <div className="flex">
                             <div className="w-32 shrink-0 flex items-center">
                               <span className="text-white">
-                                {getParticipantName(
-                                  selectedMatch.match.player1_id
-                                )}
+                                {selectedMatch.match.player1_id && selectedMatch.match.player1_id !== 0
+                                  ? getParticipantName(selectedMatch.match.player1_id)
+                                  : "TBD"}
                               </span>
                             </div>
                             <div className="flex">
@@ -938,6 +1121,7 @@ export default function TournamentMatches(props) {
                                         handleSetChange(index, "player1", "");
                                       }
                                     }}
+                                    disabled={selectedMatch.match.player1_id === 0 || selectedMatch.match.player1_id === null}
                                   />
                                 </div>
                               ))}
@@ -946,9 +1130,9 @@ export default function TournamentMatches(props) {
                           <div className="flex">
                             <div className="w-32 shrink-0 flex items-center">
                               <span className="text-white">
-                                {getParticipantName(
-                                  selectedMatch.match.player2_id
-                                )}
+                                {selectedMatch.match.player2_id && selectedMatch.match.player2_id !== 0
+                                  ? getParticipantName(selectedMatch.match.player2_id)
+                                  : "TBD"}
                               </span>
                             </div>
                             <div className="flex">
@@ -979,6 +1163,7 @@ export default function TournamentMatches(props) {
                                         handleSetChange(index, "player2", "");
                                       }
                                     }}
+                                    disabled={selectedMatch.match.player2_id === 0 || selectedMatch.match.player2_id === null}
                                   />
                                 </div>
                               ))}
@@ -994,44 +1179,65 @@ export default function TournamentMatches(props) {
                       Verify the winner
                     </h3>
                     <div className="flex justify-center space-x-4">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleUpdateChange({
-                            target: {
-                              name: "winnerId",
-                              value: selectedMatch.match.player1_id.toString(),
-                            },
-                          })
-                        }
-                        className={`px-4 py-2 rounded ${
-                          updateData.winnerId ===
-                          selectedMatch.match.player1_id?.toString()
-                            ? "bg-[#f26522] text-white"
-                            : "bg-[#3b3b3b] text-white hover:bg-[#4b4b4b]"
-                        }`}
-                      >
-                        {getParticipantName(selectedMatch.match.player1_id)}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleUpdateChange({
-                            target: {
-                              name: "winnerId",
-                              value: selectedMatch.match.player2_id.toString(),
-                            },
-                          })
-                        }
-                        className={`px-4 py-2 rounded ${
-                          updateData.winnerId ===
-                          selectedMatch.match.player2_id?.toString()
-                            ? "bg-[#f26522] text-white"
-                            : "bg-[#3b3b3b] text-white hover:bg-[#4b4b4b]"
-                        }`}
-                      >
-                        {getParticipantName(selectedMatch.match.player2_id)}
-                      </button>
+                      {selectedMatch.match.player1_id && selectedMatch.match.player1_id !== 0 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleUpdateChange({
+                              target: {
+                                name: "winnerId",
+                                value: selectedMatch.match.player1_id.toString(),
+                              },
+                            })
+                          }
+                          className={`px-4 py-2 rounded ${
+                            updateData.winnerId ===
+                            selectedMatch.match.player1_id?.toString()
+                              ? "bg-[#f26522] text-white"
+                              : "bg-[#3b3b3b] text-white hover:bg-[#4b4b4b]"
+                          }`}
+                        >
+                          {getParticipantName(selectedMatch.match.player1_id)}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-4 py-2 rounded bg-gray-700 text-gray-400 cursor-not-allowed"
+                        >
+                          TBD
+                        </button>
+                      )}
+                      
+                      {selectedMatch.match.player2_id && selectedMatch.match.player2_id !== 0 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleUpdateChange({
+                              target: {
+                                name: "winnerId",
+                                value: selectedMatch.match.player2_id.toString(),
+                              },
+                            })
+                          }
+                          className={`px-4 py-2 rounded ${
+                            updateData.winnerId ===
+                            selectedMatch.match.player2_id?.toString()
+                              ? "bg-[#f26522] text-white"
+                              : "bg-[#3b3b3b] text-white hover:bg-[#4b4b4b]"
+                          }`}
+                        >
+                          {getParticipantName(selectedMatch.match.player2_id)}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-4 py-2 rounded bg-gray-700 text-gray-400 cursor-not-allowed"
+                        >
+                          TBD
+                        </button>
+                      )}
                     </div>
                   </div>
 

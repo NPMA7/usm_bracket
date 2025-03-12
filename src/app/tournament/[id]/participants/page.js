@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { use } from 'react';
 import Link from 'next/link';
 import ParticipantForm from '@/components/ParticipantForm';
+import EditParticipantModal from '@/components/EditParticipantModal';
+import DeleteParticipantModal from '@/components/DeleteParticipantModal';
 
 export default function TournamentParticipants(props) {
   const params = use(props.params);
@@ -13,6 +15,11 @@ export default function TournamentParticipants(props) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  // State untuk modal edit dan hapus
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [selectedParticipant, setSelectedParticipant] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -45,15 +52,43 @@ export default function TournamentParticipants(props) {
         }
         
         const participantsData = await participantsResponse.json();
-        console.log('Raw Participants Data:', participantsData);
         
         // Transform data if needed
-        const transformedParticipants = participantsData.map(p => ({
-          id: p.participant?.id || p.id,
-          name: p.participant?.name || p.name,
-          email: p.participant?.email || p.email,
-          final_rank: p.participant?.final_rank || p.final_rank
-        }));
+        const transformedParticipants = participantsData.map(p => {
+          // Cek struktur data untuk memastikan akses yang benar
+          console.log('Processing participant:', p);
+          
+          // Jika data dari API berupa array dengan struktur yang berbeda
+          if (p.participant_id) {
+            return {
+              id: p.participant_id,
+              participant_id: p.participant_id,
+              name: p.name || '',
+              email: p.email || '',
+              final_rank: p.final_rank
+            };
+          }
+          
+          // Jika data dari API berupa objek dengan struktur participant
+          if (p.participant) {
+            return {
+              id: p.participant.id,
+              participant_id: p.participant.id,
+              name: p.participant.name || '',
+              email: p.participant.email || '',
+              final_rank: p.participant.final_rank
+            };
+          }
+          
+          // Fallback jika struktur tidak sesuai ekspektasi
+          return {
+            id: p.id || p.participant_id,
+            participant_id: p.id || p.participant_id,
+            name: p.name || '',
+            email: p.email || '',
+            final_rank: p.final_rank
+          };
+        });
         
         console.log('Transformed Participants:', transformedParticipants);
         setParticipants(transformedParticipants);
@@ -71,6 +106,26 @@ export default function TournamentParticipants(props) {
 
   const handleParticipantAdded = () => {
     setRefreshTrigger(prev => prev + 1);
+  };
+
+  const handleEditClick = (participant) => {
+    setSelectedParticipant(participant);
+    setEditModalOpen(true);
+  };
+
+  const handleDeleteClick = (participant) => {
+    setSelectedParticipant(participant);
+    setDeleteModalOpen(true);
+  };
+
+  const handleParticipantUpdated = () => {
+    setRefreshTrigger(prev => prev + 1);
+    setEditModalOpen(false);
+  };
+
+  const handleParticipantDeleted = () => {
+    setRefreshTrigger(prev => prev + 1);
+    setDeleteModalOpen(false);
   };
 
   if (isLoading) {
@@ -165,7 +220,7 @@ export default function TournamentParticipants(props) {
           </div>
           
           {/* List Section */}
-          <div className="bg-[#2b2b2b] rounded-lg shadow-xl p-6">
+          <div className="bg-[#2b2b2b] rounded-lg shadow-xl p-6 overflow-y-auto h-[90vh] ">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#f26522] mr-2" viewBox="0 0 20 20" fill="currentColor">
@@ -179,7 +234,7 @@ export default function TournamentParticipants(props) {
             </div>
             
             {participants.length === 0 ? (
-              <div className="bg-[#3b3b3b] rounded-lg p-8 text-center">
+              <div className="bg-[#3b3b3b] rounded-lg p-8 text-center ">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
@@ -214,6 +269,30 @@ export default function TournamentParticipants(props) {
                         </div>
                       )}
                     </div>
+
+                    {/* Tombol aksi hanya ditampilkan jika turnamen masih pending */}
+                    {tournament?.tournament?.state === 'pending' && (
+                      <div className="mt-4 flex space-x-2">
+                        <button
+                          onClick={() => handleEditClick(participant)}
+                          className="px-3 py-1 bg-blue-900/30 text-blue-400 hover:bg-blue-900/50 rounded-md text-sm flex items-center transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                          </svg>
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(participant)}
+                          className="px-3 py-1 bg-red-900/30 text-red-400 hover:bg-red-900/50 rounded-md text-sm flex items-center transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          Hapus
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -221,6 +300,28 @@ export default function TournamentParticipants(props) {
           </div>
         </div>
       </div>
+
+      {/* Modal Edit Peserta */}
+      {selectedParticipant && (
+        <EditParticipantModal
+          isOpen={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          participant={selectedParticipant}
+          tournamentId={id}
+          onParticipantUpdated={handleParticipantUpdated}
+        />
+      )}
+
+      {/* Modal Hapus Peserta */}
+      {selectedParticipant && (
+        <DeleteParticipantModal
+          isOpen={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          participant={selectedParticipant}
+          tournamentId={id}
+          onParticipantDeleted={handleParticipantDeleted}
+        />
+      )}
     </div>
   );
 } 
