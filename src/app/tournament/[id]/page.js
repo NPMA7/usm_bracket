@@ -26,6 +26,14 @@ export default function TournamentDetail({ params }) {
   const [matches, setMatches] = useState([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState(null);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const adminUser = localStorage.getItem("adminUser");
+    if (adminUser) {
+      setUser(JSON.parse(adminUser));
+    }
+  }, []);
 
   useEffect(() => {
     if (unwrappedParams) {
@@ -37,7 +45,7 @@ export default function TournamentDetail({ params }) {
   useEffect(() => {
     // Hanya jalankan jika id sudah ada
     if (!id) return;
-    
+
     // Jika turnamen sudah selesai, tidak perlu interval refresh
     if (tournament?.tournament?.state === "complete") {
       return;
@@ -47,7 +55,7 @@ export default function TournamentDetail({ params }) {
     const intervalId = setInterval(() => {
       // Gunakan fungsi fetchStandingsQuiet untuk refresh tanpa loading indicator
       fetchStandingsQuiet(id);
-      
+
       // Tambahkan juga refresh status turnamen
       checkTournamentStatus(id);
     }, 10000); // 10 detik
@@ -87,7 +95,7 @@ export default function TournamentDetail({ params }) {
 
         // Fetch standings data
         await fetchStandings(id);
-        
+
         // Fetch matches data
         await fetchMatches(id);
       } catch (err) {
@@ -124,7 +132,7 @@ export default function TournamentDetail({ params }) {
         const winsB = b.participant ? b.participant.wins || 0 : 0;
         const lossesA = a.participant ? a.participant.losses || 0 : 0;
         const lossesB = b.participant ? b.participant.losses || 0 : 0;
-        
+
         // Tim dengan W 0 dan L 0 diletakkan di urutan paling bawah
         if (winsA === 0 && lossesA === 0 && (winsB > 0 || lossesB > 0)) {
           return 1; // A di bawah B
@@ -132,7 +140,7 @@ export default function TournamentDetail({ params }) {
         if (winsB === 0 && lossesB === 0 && (winsA > 0 || lossesA > 0)) {
           return -1; // B di bawah A
         }
-        
+
         // Jika keduanya W 0 dan L 0 atau keduanya bukan W 0 dan L 0, urutkan berdasarkan wins
         return winsB - winsA;
       });
@@ -160,7 +168,6 @@ export default function TournamentDetail({ params }) {
       }
       const standingsData = await standingsResponse.json();
 
-
       // Sort standings berdasarkan jumlah kemenangan (wins) dan kekalahan (losses)
       const sortedStandings = standingsData.sort((a, b) => {
         // Periksa apakah data menggunakan format baru (dengan objek participant)
@@ -168,7 +175,7 @@ export default function TournamentDetail({ params }) {
         const winsB = b.participant ? b.participant.wins || 0 : 0;
         const lossesA = a.participant ? a.participant.losses || 0 : 0;
         const lossesB = b.participant ? b.participant.losses || 0 : 0;
-        
+
         // Tim dengan W 0 dan L 0 diletakkan di urutan paling bawah
         if (winsA === 0 && lossesA === 0 && (winsB > 0 || lossesB > 0)) {
           return 1; // A di bawah B
@@ -176,7 +183,7 @@ export default function TournamentDetail({ params }) {
         if (winsB === 0 && lossesB === 0 && (winsA > 0 || lossesA > 0)) {
           return -1; // B di bawah A
         }
-        
+
         // Jika keduanya W 0 dan L 0 atau keduanya bukan W 0 dan L 0, urutkan berdasarkan wins
         return winsB - winsA;
       });
@@ -335,23 +342,27 @@ export default function TournamentDetail({ params }) {
    */
   const checkTournamentStatus = async (tournamentId) => {
     try {
-      const response = await fetch(`/api/challonge?tournamentId=${tournamentId}`);
+      const response = await fetch(
+        `/api/challonge?tournamentId=${tournamentId}`
+      );
       if (!response.ok) {
         throw new Error("Gagal mengambil data turnamen");
       }
-      
+
       const data = await response.json();
       const tournamentData = Array.isArray(data)
         ? data.find((t) => t.tournament.id.toString() === tournamentId)
         : data;
-        
+
       if (tournamentData) {
         setTournament(tournamentData);
         setTournamentStarted(tournamentData.tournament.state !== "pending");
-        
+
         // Jika turnamen baru saja selesai, refresh standings tanpa loading
-        if (tournamentData.tournament.state === "complete" && 
-            tournament?.tournament?.state !== "complete") {
+        if (
+          tournamentData.tournament.state === "complete" &&
+          tournament?.tournament?.state !== "complete"
+        ) {
           await fetchStandingsQuiet(tournamentId);
         }
       }
@@ -368,17 +379,34 @@ export default function TournamentDetail({ params }) {
     );
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-[#1a1a1a] py-8">
-        <div className="container mx-auto px-4">
-          <div className="bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-lg">
-            {error}
-          </div>
-          <div className="mt-4">
+  const isAdmin = user && ["admin", "owner"].includes(user.role);
+
+  return (
+    <div className="min-h-screen bg-[#1a1a1a]">
+      <div className="bg-[#2b2b2b] border-b border-gray-700">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <Link
+            href={`/  `}
+            className="inline-flex items-center text-gray-400 hover:text-white transition-colors"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5 mr-2"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Kembali ke Daftar Turnamen
+          </Link>
+          {user && ["admin", "owner"].includes(user.role) && (
             <Link
-              href="/"
-              className="inline-flex items-center text-[#f26522] hover:text-[#ff7b3d] transition-colors"
+              href="/admin"
+              className="bg-[#f26522] hover:bg-[#d54d0d] text-white px-6 py-2 rounded-lg transition-colors flex items-center"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -388,42 +416,15 @@ export default function TournamentDetail({ params }) {
               >
                 <path
                   fillRule="evenodd"
-                  d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z"
+                  d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"
                   clipRule="evenodd"
                 />
               </svg>
-              Kembali ke Daftar Turnamen
+              Admin Panel
             </Link>
-          </div>
+          )}
         </div>
       </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-[#1a1a1a]">
-    <div className="bg-[#2b2b2b] border-b border-gray-700">
-      <div className="container mx-auto px-4 py-4">
-        <Link
-              href={`/`}
-          className="inline-flex items-center text-gray-400 hover:text-white transition-colors"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 mr-2"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fillRule="evenodd"
-              d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z"
-              clipRule="evenodd"
-            />
-          </svg>
-          Kembali ke Daftar Turnamen
-        </Link>
-      </div>
-    </div>
 
       <div className="container mx-auto px-4 py-8">
         <TournamentInfoCard
@@ -432,6 +433,7 @@ export default function TournamentDetail({ params }) {
           participantsCount={participantsCount}
           id={id}
           onTournamentStarted={handleTournamentStarted}
+          isAdmin={isAdmin}
         />
 
         {tournament.tournament.state === "complete" && standings.length > 0 && (
@@ -439,7 +441,11 @@ export default function TournamentDetail({ params }) {
         )}
 
         {/* Tournament Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div
+          className={`grid grid-cols-1 ${
+            isAdmin ? "md:grid-cols-2" : ""
+          } gap-8`}
+        >
           {/* Info Section */}
           <div className="bg-[#2b2b2b] rounded-lg shadow-xl">
             <div className="p-6">
@@ -507,113 +513,64 @@ export default function TournamentDetail({ params }) {
             </div>
           </div>
 
-          {/* Actions Section */}
-          <div className="bg-[#2b2b2b] rounded-lg shadow-xl">
-            <div className="p-6">
-              <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6 mr-2"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                Kelola Turnamen
-              </h2>
-
-              {!tournamentStarted && participantsCount < 2 && (
-                <div className="bg-yellow-900/50 border border-yellow-500 text-yellow-300 px-4 py-3 rounded-lg mb-6">
-                  <p className="font-bold">Turnamen belum dapat dimulai</p>
-                  <p>
-                    Turnamen membutuhkan minimal 2 peserta untuk dapat dimulai.
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <Link
-                  href={`/tournament/${id}/participants`}
-                  className="flex items-center justify-center w-full bg-[#2d2d2d] hover:bg-[#3d3d3d] text-white py-3 px-4 rounded-lg transition-colors"
-                >
+          {/* Actions Section - Only show for admin/owner */}
+          {isAdmin && (
+            <div className="bg-[#2b2b2b] rounded-lg shadow-xl">
+              <div className="p-6">
+                <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 mr-2"
+                    className="h-6 w-6 mr-2"
                     viewBox="0 0 20 20"
                     fill="currentColor"
                   >
-                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                    <path
+                      fillRule="evenodd"
+                      d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"
+                      clipRule="evenodd"
+                    />
                   </svg>
-                  Kelola Peserta
-                </Link>
+                  Kelola Turnamen
+                </h2>
 
-                <Link
-                  href={`/tournament/${id}/matches`}
-                  className="flex items-center justify-center w-full bg-[#2d2d2d] hover:bg-[#3d3d3d] text-white py-3 px-4 rounded-lg transition-colors"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 mr-2"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
+                {!tournamentStarted && participantsCount < 2 && (
+                  <div className="bg-yellow-900/50 border border-yellow-500 text-yellow-300 px-4 py-3 rounded-lg mb-6">
+                    <p className="font-bold">Turnamen belum dapat dimulai</p>
+                    <p>
+                      Turnamen membutuhkan minimal 2 peserta untuk dapat
+                      dimulai.
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <Link
+                    href={`/tournament/${id}/participants`}
+                    className="block w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-center"
                   >
-                    <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
-                  </svg>
-                  Kelola Pertandingan
-                </Link>
-
-                {tournament.tournament.state === "pending" &&
-                  participantsCount >= 2 && (
-                    <>
-                      <button
-                        onClick={handleShuffleTournament}
-                        disabled={isProcessing}
-                        className="flex items-center justify-center w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg transition-colors"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-5 w-5 mr-2"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path d="M8 5a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L13.586 5H8zM12 15a1 1 0 100-2H6.414l1.293-1.293a1 1 0 10-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L6.414 15H12z" />
-                        </svg>
-                        {isProcessing ? "Mengacak Peserta..." : "Acak Peserta"}
-                      </button>
-
-                      <button
-                        onClick={() => setShowEditPositionModal(true)}
-                        disabled={isProcessing}
-                        className="flex items-center justify-center w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg transition-colors"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-5 w-5 mr-2"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                        </svg>
-                        Edit Posisi Peserta
-                      </button>
-
-                      {shuffleSuccess && (
-                        <div className="bg-green-900/50 border border-green-500 text-green-300 px-4 py-3 rounded-lg">
-                          Peserta berhasil diacak!
-                        </div>
-                      )}
-                    </>
+                    Kelola Peserta
+                  </Link>
+                  <Link
+                    href={`/tournament/${id}/matches`}
+                    className="block w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-center"
+                  >
+                    Kelola Pertandingan
+                  </Link>
+                  {!tournamentStarted && (
+                    <button
+                      onClick={handleStartTournament}
+                      disabled={participantsCount < 2 || isProcessing}
+                      className="block w-full bg-[#f26522] hover:bg-[#ff7b3d] text-white px-4 py-2 rounded-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isProcessing ? "Memulai..." : "Mulai Turnamen"}
+                    </button>
                   )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Bracket Section */}
         <div className="mt-8">
           <div className="bg-[#2b2b2b] rounded-lg shadow-xl">
             <div className="p-6">
@@ -638,6 +595,7 @@ export default function TournamentDetail({ params }) {
                   <BracketImage
                     tournamentId={id}
                     refreshKey={bracketImageKey}
+                    isAdmin={isAdmin}
                   />
                 </div>
 
@@ -652,7 +610,7 @@ export default function TournamentDetail({ params }) {
                     >
                       <path
                         fillRule="evenodd"
-                        d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+                        d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
                         clipRule="evenodd"
                       />
                     </svg>
@@ -677,12 +635,14 @@ export default function TournamentDetail({ params }) {
         </div>
       </div>
 
-      <EditParticipantPositionModal
-        isOpen={showEditPositionModal}
-        onClose={() => setShowEditPositionModal(false)}
-        tournamentId={id}
-        onSuccess={handleEditPositionSuccess}
-      />
+      {isAdmin && (
+        <EditParticipantPositionModal
+          isOpen={showEditPositionModal}
+          onClose={() => setShowEditPositionModal(false)}
+          tournamentId={id}
+          onSuccess={handleEditPositionSuccess}
+        />
+      )}
     </div>
   );
 }

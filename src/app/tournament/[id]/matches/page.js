@@ -7,8 +7,10 @@ import MatchesFilter from "@/components/MatchesFilter";
 import MatchesTable from "@/components/MatchesTable";
 import UpdateMatchForm from "@/components/UpdateMatchForm";
 import TournamentInfo from "@/components/TournamentInfo";
+import { useRouter } from "next/navigation";
 
 export default function TournamentMatches(props) {
+  const router = useRouter();
   const params = use(props.params);
   const id = params.id;
   const [tournament, setTournament] = useState(null);
@@ -21,6 +23,21 @@ export default function TournamentMatches(props) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    // Cek apakah user adalah admin
+    const adminUser = localStorage.getItem('adminUser');
+    if (adminUser) {
+      const userData = JSON.parse(adminUser);
+      setUser(userData);
+      if (!['admin', 'owner'].includes(userData.role)) {
+        router.push(`/tournament/${id}`);
+      }
+    } else {
+      router.push(`/tournament/${id}`);
+    }
+  }, [id, router]);
 
   useEffect(() => {
     const fetchData = async () => {

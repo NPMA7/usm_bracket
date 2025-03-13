@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import HomeHeader from "@/components/HomeHeader";
-import CreateTournamentForm from "@/components/CreateTournamentForm";
 import TournamentList from "@/components/TournamentList";
 
 export default function Home() {
@@ -10,6 +9,14 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const adminUser = localStorage.getItem('adminUser');
+    if (adminUser) {
+      setUser(JSON.parse(adminUser));
+    }
+  }, []);
 
   useEffect(() => {
     const fetchTournaments = async () => {
@@ -31,10 +38,6 @@ export default function Home() {
     fetchTournaments();
   }, [refreshTrigger]);
 
-  const handleTournamentCreated = () => {
-    setRefreshTrigger((prev) => prev + 1);
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
@@ -43,66 +46,16 @@ export default function Home() {
     );
   }
 
+  const isAdmin = user && ['admin', 'owner'].includes(user.role);
+
   return (
     <div className="min-h-screen bg-[#1a1a1a]">
       <HomeHeader />
-
+      
+      
       <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Form Section */}
-          <div className="bg-[#2b2b2b] rounded-lg shadow-xl p-6">
-            <div className="flex items-center mb-6">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6 text-[#f26522] mr-2"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <h2 className="text-xl font-semibold text-white">
-                Buat Turnamen Baru
-              </h2>
-            </div>
-
-            <CreateTournamentForm onTournamentCreated={handleTournamentCreated} />
-          </div>
-
-          {/* List Section */}
-          <div className="lg:col-span-2">
-            <div className="bg-[#2b2b2b] rounded-lg shadow-xl p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-6 w-6 text-[#f26522] mr-2"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
-                  </svg>
-                  <h2 className="text-xl font-semibold text-white">
-                    Daftar Turnamen
-                  </h2>
-                </div>
-                <span className="bg-[#3b3b3b] text-gray-400 px-3 py-1 rounded-full text-sm">
-                  {tournaments.length} Turnamen
-                </span>
-              </div>
-
-              {error ? (
-                <div className="bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-lg">
-                  {error}
-                </div>
-              ) : (
-                <TournamentList tournaments={tournaments} />
-              )}
-            </div>
-          </div>
+        <div className="bg-[#2b2b2b] rounded-lg shadow-xl p-6">
+          <TournamentList tournaments={tournaments} isAdmin={isAdmin} />
         </div>
       </div>
     </div>

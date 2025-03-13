@@ -9,12 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
     "axios": "^1.6.7",
+    "bcryptjs": "^3.0.2",
     "next": "15.2.1",
     "react": "^19.0.0",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "supabase": "^2.19.6"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

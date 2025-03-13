@@ -7,6 +7,7 @@ export default function TournamentList({ refreshTrigger, onTournamentSelect }) {
   const [tournaments, setTournaments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const fetchTournaments = async () => {
@@ -90,6 +91,29 @@ export default function TournamentList({ refreshTrigger, onTournamentSelect }) {
                 : "Selesai"}
             </span>
           </div>
+
+          {isAdmin && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              <Link
+                href={`/tournament/${tournament.tournament.id}/participants`}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+              >
+                Kelola Peserta
+              </Link>
+              <Link
+                href={`/tournament/${tournament.tournament.id}/matches`}
+                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+              >
+                Kelola Pertandingan
+              </Link>
+              <Link
+                href={`/tournament/${tournament.tournament.id}`}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm"
+              >
+                Lihat Detail
+              </Link>
+            </div>
+          )}
 
           <div className="space-y-2">
             {tournament.tournament.state === "complete" && (

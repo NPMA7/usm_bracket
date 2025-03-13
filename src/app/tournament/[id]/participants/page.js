@@ -8,8 +8,10 @@ import EditParticipantModal from "@/components/EditParticipantModal";
 import DeleteParticipantModal from "@/components/DeleteParticipantModal";
 import TournamentParticipantsList from "@/components/TournamentParticipantsList";
 import TournamentInfo from "@/components/TournamentInfo";
+import { useRouter } from "next/navigation";
 
 export default function TournamentParticipants(props) {
+  const router = useRouter();
   const params = use(props.params);
   const id = params.id;
   const [tournament, setTournament] = useState(null);
@@ -17,11 +19,26 @@ export default function TournamentParticipants(props) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [user, setUser] = useState(null);
 
   // State untuk modal edit dan hapus
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [selectedParticipant, setSelectedParticipant] = useState(null);
+
+  useEffect(() => {
+    // Cek apakah user adalah admin
+    const adminUser = localStorage.getItem('adminUser');
+    if (adminUser) {
+      const userData = JSON.parse(adminUser);
+      setUser(userData);
+      if (!['admin', 'owner'].includes(userData.role)) {
+        router.push(`/tournament/${id}`);
+      }
+    } else {
+      router.push(`/tournament/${id}`);
+    }
+  }, [id, router]);
 
   useEffect(() => {
     const fetchData = async () => {

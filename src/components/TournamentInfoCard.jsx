@@ -5,7 +5,8 @@ const TournamentInfoCard = ({
   tournamentStarted,
   participantsCount,
   id,
-  onTournamentStarted
+  onTournamentStarted,
+  isAdmin,
 }) => {
   return (
     <div className="bg-[#2b2b2b] rounded-lg shadow-xl mb-8">
@@ -80,7 +81,7 @@ const TournamentInfoCard = ({
               </div>
             </div>
           </div>
-          {!tournamentStarted && (
+          {!tournamentStarted && isAdmin && (
             <StartTournamentButton
               tournamentId={id}
               onTournamentStarted={onTournamentStarted}
