@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import HomeHeader from "@/components/HomeHeader";
 import TournamentList from "@/components/TournamentList";
+import { motion } from "framer-motion";
 
 export default function Home() {
   const [tournaments, setTournaments] = useState([]);
@@ -40,8 +40,8 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#f26522] border-t-transparent"></div>
+      <div className="min-h-screen bg-gradient-to-b from-[#1a1a1a] to-[#2d2d2d] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#f26522] border-t-transparent shadow-lg"></div>
       </div>
     );
   }
@@ -49,15 +49,38 @@ export default function Home() {
   const isAdmin = user && ['admin', 'owner'].includes(user.role);
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a]">
-      <HomeHeader />
-      
-      
+    <div className="min-h-screen bg-gradient-to-b from-[#1a1a1a] to-[#2d2d2d]">
+        
+      {/* Hero Section */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8 }}
+        className="container mx-auto px-4 py-16 text-center"
+      >
+        <h1 className="text-5xl font-extrabold mb-6 text-white bg-clip-text text-transparent bg-gradient-to-r from-[#f26522] to-[#ff8f53]">
+          Selamat Datang di Tournament Bracket USM
+        </h1>
+        <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
+          Platform turnamen terbaik untuk mengorganisir dan mengelola kompetisi Anda dengan mudah dan profesional.
+        </p>
+      </motion.div>
+
+      {/* Tournament Section */}
       <div className="container mx-auto px-4 py-8">
-        <div className="bg-[#2b2b2b] rounded-lg shadow-xl p-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          className="bg-[#2b2b2b] rounded-2xl shadow-2xl p-8 backdrop-blur-lg bg-opacity-90"
+        >
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-3xl font-bold text-white">Daftar Turnamen</h2>
+          </div>
           <TournamentList tournaments={tournaments} isAdmin={isAdmin} />
-        </div>
+        </motion.div>
       </div>
+
     </div>
   );
 }

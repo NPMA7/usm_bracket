@@ -10,6 +10,13 @@ export default function Toast() {
     if (adminUser) {
       setUser(JSON.parse(adminUser))
     }
+
+    // Menghilangkan toast setelah 5 detik
+    const timer = setTimeout(() => {
+      setIsVisible(false)
+    }, 5000)
+
+    return () => clearTimeout(timer) // Membersihkan timer saat komponen unmount
   }, [])
 
   if (!user || !isVisible) return null

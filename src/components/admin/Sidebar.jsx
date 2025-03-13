@@ -1,8 +1,18 @@
 import Link from 'next/link'
 import { useSidebar } from '@/context/SidebarContext'
+import { useState, useEffect } from 'react'
 
 export default function Sidebar() {
   const { isOpen, setIsOpen } = useSidebar()
+  const [isTournamentOpen, setIsTournamentOpen] = useState(false)
+  const [user, setUser] = useState(null)
+
+  useEffect(() => {
+    const adminUser = localStorage.getItem('adminUser')
+    if (adminUser) {
+      setUser(JSON.parse(adminUser))
+    }
+  }, [])
 
   const handleLogout = () => {
     localStorage.removeItem('adminUser')
@@ -27,15 +37,28 @@ export default function Sidebar() {
           <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
         </svg>
       )
-    },
+    }
+  ]
+
+  const tournamentSubMenu = [
     {
-      name: 'Buat Turnamen',
+      name: 'Dashboard Turnamen',
       href: '/admin/tournaments',
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1zm3 0a1 1 0 011-1h.01a1 1 0 110 2H13a1 1 0 01-1-1z" clipRule="evenodd" />
+          <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
         </svg>
       )
+    },
+    {
+      name: 'Buat Turnamen',
+      href: '/admin/tournaments/create',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+        </svg>
+      ),
+      roleRequired: 'owner'
     }
   ]
 
@@ -80,8 +103,12 @@ export default function Sidebar() {
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
           <div className="flex items-center space-x-3">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#f26522]" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 1.414L10.586 9H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z" clipRule="evenodd" />
-            </svg>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />  </svg>
             <span className="text-xl font-bold text-white">Admin Panel</span>
           </div>
         </div>
@@ -100,6 +127,59 @@ export default function Sidebar() {
                 {item.name}
               </Link>
             ))}
+
+            {/* Tournament Dropdown */}
+            <div className="space-y-1">
+              <button
+                onClick={() => setIsTournamentOpen(!isTournamentOpen)}
+                className="flex items-center w-full px-4 py-3 text-gray-300 rounded-lg hover:bg-[#363636] hover:text-white transition-colors duration-200"
+              >
+                <span className="inline-flex items-center justify-center mr-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                <span className="flex-1 text-left">Turnamen</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className={`h-4 w-4 transform transition-transform duration-200 ${
+                    isTournamentOpen ? 'rotate-180' : ''
+                  }`}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+              
+              {/* Submenu */}
+              <div className={`pl-4 space-y-1 ${isTournamentOpen ? 'block' : 'hidden'}`}>
+                {tournamentSubMenu.map((item) => (
+                  <Link
+                    key={item.name}
+                    href={item.roleRequired && (!user || user.role !== item.roleRequired) ? '#' : item.href}
+                    className={`flex items-center px-4 py-2 text-sm rounded-lg transition-colors duration-200 ${
+                      item.roleRequired && (!user || user.role !== item.roleRequired)
+                        ? 'text-gray-500 cursor-not-allowed bg-[#2b2b2b]'
+                        : 'text-gray-300 hover:bg-[#363636] hover:text-white'
+                    }`}
+                    onClick={(e) => {
+                      if (item.roleRequired && (!user || user.role !== item.roleRequired)) {
+                        e.preventDefault();
+                      }
+                    }}
+                  >
+                    <span className="inline-flex items-center justify-center mr-3">
+                      {item.icon}
+                    </span>
+                    {item.name}
+                    {item.roleRequired && (!user || user.role !== item.roleRequired) && (
+                      <span className="ml-2 text-xs text-gray-500">(Owner only)</span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="mt-8 pt-8 border-t border-gray-700">

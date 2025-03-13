@@ -14,6 +14,8 @@ function UsersManagementContent() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [showModal, setShowModal] = useState(false)
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalAdmins: 0,
@@ -74,6 +76,11 @@ function UsersManagementContent() {
 
   const handleRoleChange = async (userId, newRole) => {
     try {
+      const adminUser = JSON.parse(localStorage.getItem('adminUser'))
+      if (adminUser.role !== 'owner') {
+        return
+      }
+
       const { error } = await supabase
         .from('users')
         .update({ role: newRole })
@@ -89,6 +96,12 @@ function UsersManagementContent() {
   }
 
   const handleDeleteUser = async (userId) => {
+    const adminUser = JSON.parse(localStorage.getItem('adminUser'))
+    if (adminUser.role !== 'owner') {
+      alert('Hanya owner yang dapat menghapus pengguna')
+      return
+    }
+
     if (!window.confirm('Apakah Anda yakin ingin menghapus user ini?')) {
       return
     }
@@ -117,9 +130,9 @@ function UsersManagementContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-2xl">Loading...</div>
-      </div>
+      <div className="min-h-screen bg-gradient-to-b from-[#1a1a1a] to-[#2d2d2d] flex items-center justify-center">
+      <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#f26522] border-t-transparent shadow-lg"></div>
+    </div>
     )
   }
 
@@ -290,15 +303,24 @@ function UsersManagementContent() {
                         <div className="text-sm text-gray-400">WA: {user.whatsapp}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={user.role}
-                          onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                          className="text-sm text-gray-300 bg-[#363636] border border-gray-700 rounded-lg px-3 py-1 w-full max-w-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="user">User</option>
-                          <option value="admin">Admin</option>
-                          <option value="owner">Owner</option>
-                        </select>
+                        {JSON.parse(localStorage.getItem('adminUser'))?.role === 'owner' ? (
+                          <select
+                            value={user.role}
+                            onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                            className="text-sm text-gray-300 bg-[#363636] border border-gray-700 rounded-lg px-3 py-1 w-full max-w-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                            <option value="owner">Owner</option>
+                          </select>
+                        ) : (
+                          <span className={`inline-flex px-3 py-1 text-sm rounded-lg
+                            ${user.role === 'owner' ? 'bg-orange-500/20 text-orange-400' : 
+                              user.role === 'admin' ? 'bg-purple-500/20 text-purple-400' : 
+                              'bg-blue-500/20 text-blue-400'}`}>
+                            {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-400">
@@ -311,17 +333,22 @@ function UsersManagementContent() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <button
-                          onClick={() => router.push(`/admin/users/${user.id}`)}
+                          onClick={() => {
+                            setSelectedUser(user)
+                            setShowModal(true)
+                          }}
                           className="text-blue-500 hover:text-blue-400 mr-4 transition-colors duration-150"
                         >
                           Detail
                         </button>
-                        <button
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="text-red-500 hover:text-red-400 transition-colors duration-150"
-                        >
-                          Hapus
-                        </button>
+                        {JSON.parse(localStorage.getItem('adminUser'))?.role === 'owner' && (
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="text-red-500 hover:text-red-400 transition-colors duration-150"
+                          >
+                            Hapus
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -330,6 +357,98 @@ function UsersManagementContent() {
             </div>
           </div>
         </main>
+
+        {/* Modal Detail Pengguna */}
+        {showModal && selectedUser && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-[#2b2b2b] rounded-xl p-6 max-w-2xl w-full mx-4 relative">
+              <button
+                onClick={() => {
+                  setShowModal(false)
+                  setSelectedUser(null)
+                }}
+                className="absolute top-4 right-4 text-gray-400 hover:text-white"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              <div className="flex items-center mb-6">
+                <div className="h-16 w-16 flex-shrink-0">
+                  {selectedUser.avatar ? (
+                    <img
+                      className="h-16 w-16 rounded-full object-cover"
+                      src={selectedUser.avatar}
+                      alt={selectedUser.name}
+                    />
+                  ) : (
+                    <div className="h-16 w-16 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500 text-2xl font-medium">
+                      {selectedUser.name?.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div className="ml-4">
+                  <h3 className="text-xl font-semibold text-white">{selectedUser.name}</h3>
+                  <p className="text-gray-400">@{selectedUser.username}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm text-gray-400">Email</label>
+                    <p className="text-white">{selectedUser.email}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-400">WhatsApp</label>
+                    <p className="text-white">{selectedUser.whatsapp}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-400">Role</label>
+                    <p className={`px-3 w-20 py-1 text-sm text-center rounded-lg mt-1
+                      ${selectedUser.role === 'owner' ? 'bg-orange-500/20 text-orange-400' : 
+                        selectedUser.role === 'admin' ? 'bg-purple-500/20 text-purple-400' : 
+                        'bg-blue-500/20 text-blue-400'}`}>
+                      {selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm text-gray-400">Tanggal Registrasi</label>
+                    <p className="text-white">
+                      {new Date(selectedUser.created_at).toLocaleDateString('id-ID', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-400">Tanggal Ulang Tahun</label>
+                    <p className="text-white">
+                      {selectedUser.birthdate ? 
+                        new Date(selectedUser.birthdate).toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric'
+                        }) : 'Belum diatur'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-400">Alamat</label>
+                    <p className="text-white break-words">
+                      {selectedUser.address || 'Belum diatur'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
