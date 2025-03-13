@@ -1,18 +1,34 @@
+'use client'
 import Link from 'next/link'
 import { useSidebar } from '@/context/SidebarContext'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 export default function Sidebar() {
   const { isOpen, setIsOpen } = useSidebar()
   const [isTournamentOpen, setIsTournamentOpen] = useState(false)
   const [user, setUser] = useState(null)
+  const sidebarRef = useRef(null)
 
   useEffect(() => {
     const adminUser = localStorage.getItem('adminUser')
     if (adminUser) {
       setUser(JSON.parse(adminUser))
     }
-  }, [])
+
+    setIsOpen(false)
+
+    const handleClickOutside = (event) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(event.target)) {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [setIsOpen])
 
   const handleLogout = () => {
     localStorage.removeItem('adminUser')
@@ -96,7 +112,8 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <div 
-        className={`fixed top-0 left-0 h-screen bg-[#2b2b2b] text-gray-300 w-64 transform transition-transform duration-300 ease-in-out ${
+        ref={sidebarRef}
+        className={`fixed top-0 left-0 h-screen bg-[#2b2b2b] z-100 text-gray-300 w-64 transform transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } border-r border-gray-700`}
       >

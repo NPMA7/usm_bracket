@@ -40,9 +40,12 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#1a1a1a] to-[#2d2d2d] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#f26522] border-t-transparent shadow-lg"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[#1a1a1a]">
+      <div className="flex flex-col items-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#f26522] border-t-transparent mb-4"></div>
+        <p className="text-white">Memuat data...</p>
       </div>
+    </div>
     );
   }
 
@@ -56,9 +59,9 @@ export default function Home() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8 }}
-        className="container mx-auto px-4 py-16 text-center"
+        className="container mx-auto px-4 py-8 text-center"
       >
-        <h1 className="text-5xl font-extrabold mb-6 text-white bg-clip-text text-transparent bg-gradient-to-r from-[#f26522] to-[#ff8f53]">
+        <h1 className="text-5xl font-extrabold mb-2 text-white ">
           Selamat Datang di Tournament Bracket USM
         </h1>
         <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
@@ -67,7 +70,7 @@ export default function Home() {
       </motion.div>
 
       {/* Tournament Section */}
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto p-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

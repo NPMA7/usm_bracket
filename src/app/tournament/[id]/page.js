@@ -373,9 +373,12 @@ export default function TournamentDetail({ params }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#f26522] border-t-transparent"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[#1a1a1a]">
+      <div className="flex flex-col items-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#f26522] border-t-transparent mb-4"></div>
+        <p className="text-white">Memuat data...</p>
       </div>
+    </div>
     );
   }
 
@@ -622,7 +625,7 @@ export default function TournamentDetail({ params }) {
                     )}
                   </h2>
 
-                  <div className="bg-[#232323] rounded-lg overflow-auto h-[90vh]">
+                  <div className="bg-[#232323] rounded-lg overflow-auto md:h-[90vh] h-[50vh]">
                     <StandingsTable
                       standings={standings}
                       isLoading={isLoadingStandings}

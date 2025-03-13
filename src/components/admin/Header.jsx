@@ -97,7 +97,7 @@ export default function Header() {
   // Jika user belum dimuat, tampilkan placeholder
   if (isLoading) {
     return (
-      <header className="bg-[#2b2b2b] border-b border-gray-700">
+      <header className="bg-[#2b2b2b] border-b border-gray-700 fixed top-0 left-0 right-0 z-10">
         <div className="mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
@@ -123,7 +123,7 @@ export default function Header() {
   // Jika user tidak ada, tampilkan header kosong
   if (!user) {
     return (
-      <header className="bg-[#2b2b2b] border-b border-gray-700">
+      <header className="bg-[#2b2b2b] border-b border-gray-700 fixed top-0 left-0 right-0 z-10">
         <div className="mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
@@ -145,7 +145,7 @@ export default function Header() {
   console.log('Current user data in Header:', user)
 
   return (
-    <header className="bg-[#2b2b2b] border-b border-gray-700">
+    <header className="bg-[#2b2b2b] border-b border-gray-700 fixed top-0 left-0 right-0 z-10">
       <div className="mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
