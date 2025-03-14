@@ -1,6 +1,13 @@
 const FinalResultBox = ({ standings }) => {
   if (!standings || standings.length === 0) return null;
 
+  // Ambil 2 peserta teratas berdasarkan final_rank
+  const topParticipants = standings
+    .filter(p => p.final_rank && p.final_rank <= 2)
+    .sort((a, b) => a.final_rank - b.final_rank);
+
+  if (topParticipants.length === 0) return null;
+
   return (
     <div className="bg-[#2b2b2b] rounded-lg shadow-xl mb-8">
       <div className="p-6">
@@ -22,20 +29,13 @@ const FinalResultBox = ({ standings }) => {
           Final Result
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {standings.slice(0, 2).map((participant, index) => {
-            const participantData = participant.participant || participant;
-            const participantId =
-              participantData.id || participantData.participant_id;
-            const name =
-              participantData.name ||
-              participantData.display_name ||
-              "Unnamed";
-            const wins = participantData.wins || 0;
-            const losses = participantData.losses || 0;
+          {topParticipants.map((participant, index) => {
+            const wins = participant.wins || 0;
+            const losses = participant.losses || 0;
 
             return (
               <div
-                key={participantId}
+                key={participant.id}
                 className={`p-6 rounded-lg flex items-center justify-between ${
                   index === 0
                     ? "bg-gradient-to-r from-[#f26522]/20 to-[#f26522]/5 border border-[#f26522]"
@@ -61,7 +61,7 @@ const FinalResultBox = ({ standings }) => {
                     </div>
                   )}
                   <div>
-                    <div className="text-lg font-bold text-white">{name}</div>
+                    <div className="text-lg font-bold text-white">{participant.name}</div>
                     <div className="text-sm text-gray-400 flex items-center mt-1">
                       <span className="font-medium mr-2">
                         {index === 0 ? "Champion" : "Runner-up"}

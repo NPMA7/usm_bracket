@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import TournamentList from "@/components/TournamentList";
 import { motion } from "framer-motion";
+import { supabase } from "@/lib/supabase";
 
 export default function Home() {
   const [tournaments, setTournaments] = useState([]);
@@ -22,12 +23,25 @@ export default function Home() {
     const fetchTournaments = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch("/api/challonge");
-        if (!response.ok) {
-          throw new Error("Gagal mengambil data turnamen");
+        const { data, error } = await supabase
+          .from('bracket_tournaments')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          throw error;
         }
-        const data = await response.json();
-        setTournaments(data);
+
+        // Format data untuk kompatibilitas dengan komponen yang ada
+        const formattedData = data.map(tournament => ({
+          tournament: {
+            ...tournament,
+            id: tournament.challonge_id,
+            local_data: tournament
+          }
+        }));
+
+        setTournaments(formattedData);
       } catch (err) {
         setError(err.message);
       } finally {

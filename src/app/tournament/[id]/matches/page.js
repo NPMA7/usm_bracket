@@ -8,6 +8,7 @@ import MatchesTable from "@/components/MatchesTable";
 import UpdateMatchForm from "@/components/UpdateMatchForm";
 import TournamentInfo from "@/components/TournamentInfo";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 export default function TournamentMatches(props) {
   const router = useRouter();
@@ -45,40 +46,73 @@ export default function TournamentMatches(props) {
 
       setIsLoading(true);
       try {
-        // Fetch tournament details
-        const tournamentResponse = await fetch(`/api/challonge?tournamentId=${id}`);
-        if (!tournamentResponse.ok) {
-          throw new Error("Gagal mengambil data turnamen");
+        // Fetch tournament details from database
+        const { data: tournamentData, error: tournamentError } = await supabase
+          .from('bracket_tournaments')
+          .select('*')
+          .eq('challonge_id', id)
+          .single();
+        
+        if (tournamentError) {
+          throw new Error("Gagal mengambil data turnamen dari database");
         }
-        const tournamentData = await tournamentResponse.json();
-        const tournament = Array.isArray(tournamentData)
-          ? tournamentData.find((t) => t.tournament.id.toString() === id)
-          : tournamentData;
+        
+        // Format data untuk kompatibilitas dengan komponen yang ada
+        const formattedTournament = {
+          tournament: {
+            ...tournamentData,
+            id: tournamentData.challonge_id,
+            local_data: tournamentData
+          }
+        };
+        
+        setTournament(formattedTournament);
 
-        if (!tournament) {
-          throw new Error("Turnamen tidak ditemukan");
+        // Fetch matches from database
+        const { data: matchesData, error: matchesError } = await supabase
+          .from('bracket_matches')
+          .select('*')
+          .eq('tournament_id', id)
+          .order('suggested_play_order', { nullsLast: true });
+        
+        if (matchesError) {
+          throw new Error("Gagal mengambil data pertandingan dari database");
         }
-        setTournament(tournament);
+        
+        // Format data untuk kompatibilitas dengan komponen yang ada
+        const formattedMatches = matchesData.map(match => ({
+          match: {
+            ...match,
+            id: match.challonge_id,
+            tournament_id: match.tournament_id,
+            local_data: match
+          }
+        }));
+        
+        setMatches(formattedMatches);
 
-        // Fetch matches
-        const matchesResponse = await fetch(
-          `/api/challonge/matches?tournamentId=${id}`
-        );
-        if (!matchesResponse.ok) {
-          throw new Error("Gagal mengambil data pertandingan");
+        // Fetch participants from database
+        const { data: participantsData, error: participantsError } = await supabase
+          .from('bracket_participants')
+          .select('*')
+          .eq('tournament_id', id)
+          .order('seed', { nullsLast: true });
+        
+        if (participantsError) {
+          throw new Error("Gagal mengambil data peserta dari database");
         }
-        const matchesData = await matchesResponse.json();
-        setMatches(matchesData);
-
-        // Fetch participants
-        const participantsResponse = await fetch(
-          `/api/challonge/participants?tournamentId=${id}`
-        );
-        if (!participantsResponse.ok) {
-          throw new Error("Gagal mengambil data peserta");
-        }
-        const participantsData = await participantsResponse.json();
-        setParticipants(participantsData);
+        
+        // Format data untuk kompatibilitas dengan komponen yang ada
+        const formattedParticipants = participantsData.map(participant => ({
+          participant: {
+            ...participant,
+            id: participant.challonge_id,
+            tournament_id: participant.tournament_id,
+            local_data: participant
+          }
+        }));
+        
+        setParticipants(formattedParticipants);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -163,34 +197,45 @@ export default function TournamentMatches(props) {
         winnerId = selectedMatch.match.player2_id;
       }
 
-      const response = await fetch(
-        `/api/challonge/matches/${selectedMatch.match.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            tournamentId: id,
-            scores: scoresString,
-            winnerId: winnerId,
-          }),
-        }
-      );
+      // Update pertandingan di database
+      const { data, error } = await supabase
+        .from('bracket_matches')
+        .update({
+          winner_id: winnerId,
+          scores_csv: scoresString,
+          state: winnerId ? 'complete' : 'open',
+          updated_at: new Date().toISOString()
+        })
+        .eq('challonge_id', selectedMatch.match.id)
+        .eq('tournament_id', id)
+        .select();
 
-      if (!response.ok) {
-        throw new Error("Gagal mengupdate pertandingan");
+      if (error) {
+        throw new Error("Gagal mengupdate pertandingan di database");
       }
 
       // Refresh matches data
-      const matchesResponse = await fetch(
-        `/api/challonge/matches?tournamentId=${id}`
-      );
-      if (!matchesResponse.ok) {
-        throw new Error("Gagal mengambil data pertandingan");
+      const { data: matchesData, error: matchesError } = await supabase
+        .from('bracket_matches')
+        .select('*')
+        .eq('tournament_id', id)
+        .order('suggested_play_order', { nullsLast: true });
+      
+      if (matchesError) {
+        throw new Error("Gagal mengambil data pertandingan dari database");
       }
-      const matchesData = await matchesResponse.json();
-      setMatches(matchesData);
+      
+      // Format data untuk kompatibilitas dengan komponen yang ada
+      const formattedMatches = matchesData.map(match => ({
+        match: {
+          ...match,
+          id: match.challonge_id,
+          tournament_id: match.tournament_id,
+          local_data: match
+        }
+      }));
+      
+      setMatches(formattedMatches);
 
       // Reset selection
       setSelectedMatch(null);
@@ -207,32 +252,45 @@ export default function TournamentMatches(props) {
 
     setIsProcessing(true);
     try {
-      const response = await fetch(
-        `/api/challonge/matches/${match.match.id}/reopen`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            tournamentId: id,
-          }),
-        }
-      );
+      // Update pertandingan di database
+      const { data, error } = await supabase
+        .from('bracket_matches')
+        .update({
+          winner_id: null,
+          scores_csv: '',
+          state: 'open',
+          updated_at: new Date().toISOString()
+        })
+        .eq('challonge_id', match.match.id)
+        .eq('tournament_id', id)
+        .select();
 
-      if (!response.ok) {
-        throw new Error("Gagal membuka kembali pertandingan");
+      if (error) {
+        throw new Error("Gagal membuka kembali pertandingan di database");
       }
 
       // Refresh matches data
-      const matchesResponse = await fetch(
-        `/api/challonge/matches?tournamentId=${id}`
-      );
-      if (!matchesResponse.ok) {
-        throw new Error("Gagal mengambil data pertandingan");
+      const { data: matchesData, error: matchesError } = await supabase
+        .from('bracket_matches')
+        .select('*')
+        .eq('tournament_id', id)
+        .order('suggested_play_order', { nullsLast: true });
+      
+      if (matchesError) {
+        throw new Error("Gagal mengambil data pertandingan dari database");
       }
-      const matchesData = await matchesResponse.json();
-      setMatches(matchesData);
+      
+      // Format data untuk kompatibilitas dengan komponen yang ada
+      const formattedMatches = matchesData.map(match => ({
+        match: {
+          ...match,
+          id: match.challonge_id,
+          tournament_id: match.tournament_id,
+          local_data: match
+        }
+      }));
+      
+      setMatches(formattedMatches);
 
       // Reset selection
       setSelectedMatch(null);
@@ -257,15 +315,19 @@ export default function TournamentMatches(props) {
 
     setIsProcessing(true);
     try {
-      const response = await fetch(
-        `/api/challonge/tournaments/${id}/finalize`,
-        {
-          method: "POST",
-        }
-      );
+      // Update status turnamen di database
+      const { data, error } = await supabase
+        .from('bracket_tournaments')
+        .update({
+          state: 'complete',
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('challonge_id', id)
+        .select();
 
-      if (!response.ok) {
-        throw new Error("Gagal menyelesaikan turnamen");
+      if (error) {
+        throw new Error("Gagal menyelesaikan turnamen di database");
       }
 
       // Redirect ke halaman detail turnamen

@@ -1,3 +1,4 @@
+'use client';
 const StandingsTable = ({ standings, isLoading }) => {
   if (isLoading) {
     return (
@@ -31,19 +32,16 @@ const StandingsTable = ({ standings, isLoading }) => {
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-700">
-        {standings.map((standing, index) => {
-          const participantData = standing.participant || standing;
-          const participantId =
-            participantData.id || participantData.participant_id;
-          const name =
-            participantData.name || participantData.display_name || "Unnamed";
-          const rank = index + 1;
-          const wins = participantData.wins || 0;
-          const losses = participantData.losses || 0;
+        {standings.map((item, index) => {
+          const participant = item.participant || item;
+          const rank = participant.final_rank || index + 1;
+          const name = participant.name || "Unnamed";
+          const wins = participant.wins || 0;
+          const losses = participant.losses || 0;
 
           return (
             <tr
-              key={participantId}
+              key={`participant-${participant.id || index}`}
               className="hover:bg-[#2d2d2d] transition-colors"
             >
               <td className="px-4 py-3 text-sm text-gray-300">{rank}</td>

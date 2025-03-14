@@ -9,6 +9,7 @@ import DeleteParticipantModal from "@/components/DeleteParticipantModal";
 import TournamentParticipantsList from "@/components/TournamentParticipantsList";
 import TournamentInfo from "@/components/TournamentInfo";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 export default function TournamentParticipants(props) {
   const router = useRouter();
@@ -44,71 +45,54 @@ export default function TournamentParticipants(props) {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        // Fetch tournament details
-        const tournamentResponse = await fetch(`/api/challonge?tournamentId=${id}`);
+        // Fetch tournament details from bracket_tournaments
+        const { data: tournamentData, error: tournamentError } = await supabase
+          .from('bracket_tournaments')
+          .select('*')
+          .eq('challonge_id', id)
+          .single();
 
-        if (!tournamentResponse.ok) {
-          throw new Error("Gagal mengambil data turnamen");
+        if (tournamentError) {
+          throw new Error("Gagal mengambil data turnamen dari database");
         }
 
-        const tournamentData = await tournamentResponse.json();
-        // Find the tournament with the matching ID
-        const tournament = Array.isArray(tournamentData)
-          ? tournamentData.find((t) => t.tournament.id.toString() === id)
-          : tournamentData;
-
-        if (!tournament) {
+        if (!tournamentData) {
           throw new Error("Turnamen tidak ditemukan");
         }
 
-        setTournament(tournament);
+        // Format data untuk kompatibilitas dengan komponen yang ada
+        const formattedTournament = {
+          tournament: {
+            ...tournamentData,
+            id: tournamentData.challonge_id,
+            local_data: tournamentData
+          }
+        };
 
-        // Fetch participants
-        const participantsResponse = await fetch(
-          `/api/challonge/participants?tournamentId=${id}`
-        );
+        setTournament(formattedTournament);
 
-        if (!participantsResponse.ok) {
-          throw new Error("Gagal mengambil data peserta");
+        // Fetch participants from bracket_participants
+        const { data: participantsData, error: participantsError } = await supabase
+          .from('bracket_participants')
+          .select('*')
+          .eq('tournament_id', id)
+          .order('seed', { nullsLast: true });
+
+        if (participantsError) {
+          throw new Error("Gagal mengambil data peserta dari database");
         }
 
-        const participantsData = await participantsResponse.json();
+        // Format data untuk kompatibilitas dengan komponen yang ada
+        const formattedParticipants = participantsData.map(participant => ({
+          id: participant.challonge_id,
+          participant_id: participant.challonge_id,
+          name: participant.name || "",
+          seed: participant.seed,
+          final_rank: participant.final_rank,
+          original_data: participant
+        }));
 
-        // Transform data if needed
-        const transformedParticipants = participantsData.map((p) => {
-          // Jika data dari API berupa array dengan struktur yang berbeda
-          if (p.participant_id) {
-            return {
-              id: p.participant_id,
-              participant_id: p.participant_id,
-              name: p.name || "",
-              email: p.email || "",
-              final_rank: p.final_rank,
-            };
-          }
-
-          // Jika data dari API berupa objek dengan struktur participant
-          if (p.participant) {
-            return {
-              id: p.participant.id,
-              participant_id: p.participant.id,
-              name: p.participant.name || "",
-              email: p.participant.email || "",
-              final_rank: p.participant.final_rank,
-            };
-          }
-
-          // Fallback jika struktur tidak sesuai ekspektasi
-          return {
-            id: p.id || p.participant_id,
-            participant_id: p.id || p.participant_id,
-            name: p.name || "",
-            email: p.email || "",
-            final_rank: p.final_rank,
-          };
-        });
-
-        setParticipants(transformedParticipants);
+        setParticipants(formattedParticipants);
       } catch (err) {
         setError(err.message);
       } finally {

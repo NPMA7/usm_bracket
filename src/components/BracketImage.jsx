@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import ParticipantManager from './ParticipantManager';
+import { supabase } from '@/lib/supabase';
 
-export default function BracketImage({ tournamentId, refreshKey }) {
+export default function BracketImage({ tournamentId, refreshKey, isAdmin }) {
   const [bracketUrls, setBracketUrls] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -12,14 +12,12 @@ export default function BracketImage({ tournamentId, refreshKey }) {
   const [participants, setParticipants] = useState([]);
   const [iframeError, setIframeError] = useState(false);
   const [challongeUrl, setChallongeUrl] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [showParticipantManager, setShowParticipantManager] = useState(false);
   const [moduleRefreshKey, setModuleRefreshKey] = useState(0);
   const moduleIframeRef = useRef(null);
 
   useEffect(() => {
     fetchBracketImage();
-  }, [tournamentId]);
+  }, [tournamentId, refreshKey]);
 
   useEffect(() => {
     if (moduleRefreshKey > 0) {
@@ -31,44 +29,49 @@ export default function BracketImage({ tournamentId, refreshKey }) {
     setIsLoading(true);
     setIframeError(false);
     try {
-      const tournamentResponse = await fetch(`/api/challonge?tournamentId=${tournamentId}`);
-      if (!tournamentResponse.ok) {
-        throw new Error('Gagal mengambil data turnamen');
+      // Ambil data turnamen dari database
+      const { data: tournamentData, error: tournamentError } = await supabase
+        .from('bracket_tournaments')
+        .select('*')
+        .eq('challonge_id', tournamentId)
+        .single();
+      
+      if (tournamentError) {
+        throw new Error('Gagal mengambil data turnamen dari database');
       }
       
-      const tournamentData = await tournamentResponse.json();
-      const tournament = Array.isArray(tournamentData) 
-        ? tournamentData.find(t => t.tournament.id.toString() === tournamentId)
-        : tournamentData;
-          
-      if (!tournament) {
-        throw new Error('Turnamen tidak ditemukan');
-      }
+      setTournament(tournamentData);
       
-      setTournament(tournament);
-      
-      const challongeUrl = tournament.tournament.url;
+      const challongeUrl = tournamentData.url;
       setChallongeUrl(challongeUrl);
       
-      const isStarted = tournament.tournament.state !== 'pending';
+      const isStarted = tournamentData.state !== 'pending';
       setTournamentStarted(isStarted);
       
-      const participantsResponse = await fetch(`/api/challonge/participants?tournamentId=${tournamentId}`);
-      if (participantsResponse.ok) {
-        const participantsData = await participantsResponse.json();
+      // Ambil data peserta dari database
+      const { data: participantsData, error: participantsError } = await supabase
+        .from('bracket_participants')
+        .select('*')
+        .eq('tournament_id', tournamentId)
+        .order('seed', { nullsLast: true });
+      
+      if (!participantsError) {
         setParticipants(participantsData);
       }
       
-      const response = await fetch(`/api/challonge/bracket?tournamentId=${tournamentId}`);
+      // Buat URL untuk gambar bracket
+      const liveImageUrl = tournamentData.live_image_url || `https://challonge.com/${challongeUrl}/module`;
+      const svgIconUrl = `https://challonge.com/${challongeUrl}.svg`;
+      const fullSizeImageUrl = tournamentData.full_challonge_url + '.svg';
       
-      if (!response.ok) {
-        throw new Error('Gagal mengambil gambar bracket');
-      }
-      
-      const data = await response.json();
-      setBracketUrls(data);
-
-      setIsAdmin(true);
+      setBracketUrls({
+        liveImage: liveImageUrl,
+        svgImage: svgIconUrl,
+        fullSizeImage: fullSizeImageUrl,
+        isStarted: isStarted,
+        participantsCount: tournamentData.participants_count || 0,
+        state: tournamentData.state
+      });
     } catch (err) {
       setError(err.message);
       console.error('Error fetching bracket image:', err);
@@ -95,7 +98,7 @@ export default function BracketImage({ tournamentId, refreshKey }) {
 
   const getChallongeDirectUrl = () => {
     if (!tournament) return '';
-    return tournament.tournament.full_challonge_url;
+    return tournament.full_challonge_url;
   };
 
   const getChallongeModuleUrl = () => {
@@ -109,9 +112,6 @@ export default function BracketImage({ tournamentId, refreshKey }) {
     return participantsCount >= 2;
   };
 
-  const toggleParticipantManager = () => {
-    setShowParticipantManager(!showParticipantManager);
-  };
 
   const handleModuleIframeLoad = () => {
     setIframeError(false);
@@ -156,17 +156,12 @@ export default function BracketImage({ tournamentId, refreshKey }) {
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
             <span>
-              <strong>Turnamen belum dimulai.</strong> Gambar bracket mungkin belum lengkap atau belum tersedia. Silakan mulai turnamen di Challonge untuk melihat bracket lengkap.
+              <strong>Turnamen belum dimulai.</strong> Gambar bracket mungkin belum lengkap atau belum tersedia.
             </span>
           </div>
         </div>
       )}
 
-      {showParticipantManager && isAdmin && !tournamentStarted && (
-        <div className="mb-6">
-          <ParticipantManager tournamentId={tournamentId} onPositionSaved={refreshBracket} />
-        </div>
-      )}
       
       <div className="overflow-auto">
         <div className="flex flex-col justify-center">
@@ -174,7 +169,6 @@ export default function BracketImage({ tournamentId, refreshKey }) {
             <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded w-full">
               <p className="font-bold mb-2">Bracket belum tersedia</p>
               <p>Turnamen membutuhkan minimal 2 peserta dan harus dimulai untuk menampilkan bracket.</p>
-              <p className="mt-2">Silakan tambahkan peserta dan mulai turnamen di Challonge.</p>
             </div>
           ) : iframeError ? (
             <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded w-full">

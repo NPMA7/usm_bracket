@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
+import { supabase } from '@/lib/supabase';
+
+const API_KEY = process.env.CHALLONGE_API_KEY;
+const BASE_URL = process.env.CHALLONGE_API_URL;
 
 export async function POST(request, { params }) {
   try {
@@ -22,9 +26,9 @@ export async function POST(request, { params }) {
       );
     }
 
-    // Melakukan shuffle peserta turnamen
+    // Melakukan shuffle peserta turnamen di Challonge
     const response = await axios.post(
-      `https://api.challonge.com/v1/tournaments/${id}/participants/randomize.json`,
+      `${BASE_URL}/tournaments/${id}/participants/randomize.json`,
       {},
       {
         params: {
@@ -32,6 +36,32 @@ export async function POST(request, { params }) {
         },
       }
     );
+
+    // Ambil data peserta terbaru dari Challonge setelah shuffle
+    const participantsResponse = await axios.get(
+      `${BASE_URL}/tournaments/${id}/participants.json`,
+      {
+        params: {
+          api_key: apiKey,
+        },
+      }
+    );
+
+    // Update seed peserta di database
+    for (const participant of participantsResponse.data) {
+      const { error: updateError } = await supabase
+        .from('bracket_participants')
+        .update({
+          seed: participant.participant.seed,
+          updated_at: new Date().toISOString()
+        })
+        .eq('challonge_id', participant.participant.id)
+        .eq('tournament_id', id);
+
+      if (updateError) {
+        console.error('Error updating participant seed:', updateError);
+      }
+    }
 
     return NextResponse.json(
       { message: 'Peserta berhasil diacak', data: response.data },

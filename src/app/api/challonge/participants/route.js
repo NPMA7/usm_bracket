@@ -1,8 +1,19 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
+import { supabase } from '@/lib/supabase';
 
 const API_KEY = process.env.CHALLONGE_API_KEY;
 const BASE_URL = process.env.CHALLONGE_API_URL;
+
+// Fungsi untuk mendapatkan jumlah peserta saat ini
+async function getCurrentParticipantCount(tournamentId) {
+  const { count } = await supabase
+    .from('bracket_participants')
+    .select('*', { count: 'exact' })
+    .eq('tournament_id', tournamentId);
+  
+  return count || 0;
+}
 
 // Fungsi untuk menambahkan peserta ke turnamen
 export async function POST(request) {
@@ -20,40 +31,94 @@ export async function POST(request) {
     // Jika ada bulkParticipants, proses sebagai bulk operation
     if (bulkParticipants && Array.isArray(bulkParticipants) && bulkParticipants.length > 0) {
       try {
-        const promises = bulkParticipants.map(async (participantName) => {
-          if (!participantName.trim()) return null; // Skip empty names
-          
-          return axios.post(
-            `${BASE_URL}/tournaments/${tournamentId}/participants.json`,
-            {
-              api_key: API_KEY,
-              participant: {
-                name: participantName.trim(),
-                email: '',
-                seed: null,
-              },
-            }
-          );
-        });
+        // Filter nama kosong
+        const validParticipants = bulkParticipants
+          .map(name => name.trim())
+          .filter(name => name.length > 0);
 
-        const results = await Promise.allSettled(promises);
-        
-        const successful = results.filter(r => r.status === 'fulfilled').length;
-        const failed = results.filter(r => r.status === 'rejected').length;
-        
+        if (validParticipants.length === 0) {
+          return NextResponse.json(
+            { error: 'Tidak ada nama peserta yang valid' },
+            { status: 400 }
+          );
+        }
+
+        // Dapatkan jumlah peserta saat ini untuk perhitungan seed
+        let currentCount = await getCurrentParticipantCount(tournamentId);
+        let addedParticipants = [];
+        let errors = [];
+
+        // Proses satu per satu untuk menghindari race condition
+        for (let i = 0; i < validParticipants.length; i++) {
+          const participantName = validParticipants[i];
+          const nextSeed = currentCount + i + 1;
+
+          try {
+            // Tambah ke Challonge
+            const challongeResponse = await axios.post(
+              `${BASE_URL}/tournaments/${tournamentId}/participants.json`,
+              {
+                api_key: API_KEY,
+                participant: {
+                  name: participantName,
+                  email: '',
+                  seed: nextSeed,
+                },
+              }
+            );
+
+            const participantData = challongeResponse.data.participant;
+
+            // Tambah ke database
+            const { error: supabaseError } = await supabase
+              .from('bracket_participants')
+              .insert([
+                {
+                  id: participantData.id,
+                  challonge_id: participantData.id,
+                  tournament_id: tournamentId,
+                  name: participantData.name,
+                  seed: nextSeed,
+                  final_rank: participantData.final_rank,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                }
+              ]);
+
+            if (supabaseError) {
+              throw new Error(`Gagal menyimpan ke database: ${supabaseError.message}`);
+            }
+
+            addedParticipants.push(participantData);
+          } catch (error) {
+            console.error(`Error adding participant ${participantName}:`, error);
+            errors.push({
+              name: participantName,
+              error: error.message || 'Unknown error'
+            });
+          }
+        }
+
+        // Return hasil
         return NextResponse.json({
           success: true,
-          message: `Berhasil menambahkan ${successful} peserta${failed > 0 ? `, ${failed} gagal` : ''}`
+          message: `Berhasil menambahkan ${addedParticipants.length} peserta${errors.length > 0 ? `, ${errors.length} gagal` : ''}`,
+          added: addedParticipants,
+          errors: errors.length > 0 ? errors : undefined
         });
+
       } catch (error) {
-        console.error('Error adding bulk participants:', error.response?.data || error.message);
+        console.error('Error in bulk operation:', error);
         return NextResponse.json(
-          { error: 'Failed to add bulk participants' },
-          { status: error.response?.status || 500 }
+          { 
+            error: 'Gagal menambahkan peserta secara bulk: ' + error.message,
+            details: error.response?.data || error.message
+          },
+          { status: 500 }
         );
       }
     } else {
-      // Proses single participant seperti sebelumnya
+      // Proses single participant
       if (!name) {
         return NextResponse.json(
           { error: 'Participant name is required' },
@@ -61,24 +126,69 @@ export async function POST(request) {
         );
       }
 
-      const response = await axios.post(
-        `${BASE_URL}/tournaments/${tournamentId}/participants.json`,
-        {
-          api_key: API_KEY,
-          participant: {
-            name,
-            email: email || '',
-            seed: seed || null,
-          },
-        }
-      );
+      try {
+        // Dapatkan jumlah peserta saat ini untuk perhitungan seed
+        const currentCount = await getCurrentParticipantCount(tournamentId);
+        const nextSeed = currentCount + 1;
 
-      return NextResponse.json(response.data);
+        // Tambah ke Challonge
+        const challongeResponse = await axios.post(
+          `${BASE_URL}/tournaments/${tournamentId}/participants.json`,
+          {
+            api_key: API_KEY,
+            participant: {
+              name,
+              email: email || '',
+              seed: seed || nextSeed,
+            },
+          }
+        );
+
+        // Tambah ke database
+        const participantData = challongeResponse.data.participant;
+        const { data: supabaseData, error: supabaseError } = await supabase
+          .from('bracket_participants')
+          .insert([
+            {
+              id: participantData.id,
+              challonge_id: participantData.id,
+              tournament_id: tournamentId,
+              name: participantData.name,
+              seed: seed || nextSeed,
+              final_rank: participantData.final_rank,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            }
+          ])
+          .select();
+
+        if (supabaseError) {
+          console.error('Error saving to database:', supabaseError);
+          throw new Error('Failed to save participant to database');
+        }
+
+        return NextResponse.json({
+          success: true,
+          participant: {
+            ...participantData,
+            local_data: supabaseData[0]
+          }
+        });
+      } catch (error) {
+        console.error('Error adding participant:', error);
+        if (error.response?.data) {
+          console.error('API Error details:', error.response.data);
+        }
+        return NextResponse.json(
+          { error: 'Failed to add participant: ' + (error.response?.data?.errors?.join(', ') || error.message) },
+          { status: error.response?.status || 500 }
+        );
+      }
     }
   } catch (error) {
     console.error('Error adding participant:', error.response?.data || error.message);
     return NextResponse.json(
-      { error: 'Failed to add participant' },
+      { error: 'Failed to add participant: ' + (error.response?.data?.errors?.join(', ') || error.message) },
       { status: error.response?.status || 500 }
     );
   }
@@ -89,7 +199,6 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const tournamentId = searchParams.get('tournamentId');
-    const rawData = searchParams.get('raw') === 'true';
 
     if (!tournamentId) {
       return NextResponse.json(
@@ -98,127 +207,105 @@ export async function GET(request) {
       );
     }
 
-    (`Fetching participants for tournament ID: ${tournamentId}`);
+    // Ambil data peserta dari database
+    const { data: participants, error: supabaseError } = await supabase
+      .from('bracket_participants')
+      .select('*')
+      .eq('tournament_id', tournamentId);
 
-    // Fetch participants first
-    const participantsResponse = await axios.get(
+    if (supabaseError) {
+      throw new Error('Gagal mengambil data peserta dari database');
+    }
+
+    // Format data peserta seperti response dari Challonge
+    const formattedParticipants = participants.map(participant => ({
+      participant: {
+        id: participant.challonge_id,
+        tournament_id: participant.tournament_id,
+        name: participant.name,
+        seed: participant.seed,
+        final_rank: participant.final_rank
+      }
+    }));
+
+    // Sinkronisasi dengan Challonge di background
+    syncParticipantsWithChallonge(tournamentId, participants);
+
+    return NextResponse.json(formattedParticipants);
+  } catch (error) {
+    console.error('Error fetching participants:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch participants' },
+      { status: error.response?.status || 500 }
+    );
+  }
+}
+
+// Fungsi helper untuk sinkronisasi peserta dengan Challonge
+async function syncParticipantsWithChallonge(tournamentId, localParticipants) {
+  try {
+    const challongeResponse = await axios.get(
       `${BASE_URL}/tournaments/${tournamentId}/participants.json`,
       {
         params: {
           api_key: API_KEY
-        },
+        }
       }
     );
 
-    
-    // Jika parameter raw=true, kembalikan data mentah dari API
-    if (rawData) {
-      return NextResponse.json(participantsResponse.data);
-    }
+    const challongeParticipants = challongeResponse.data;
 
-    // Then fetch matches
-    const matchesResponse = await axios.get(
-      `${BASE_URL}/tournaments/${tournamentId}/matches.json`,
-      {
-        params: {
-          api_key: API_KEY
-        },
-      }
-    );
-
-
-    // Process the data to create standings
-    const participants = participantsResponse.data;
-    const matches = matchesResponse.data;
-
-
-    // Periksa struktur data peserta
-    if (!Array.isArray(participants)) {
-      console.error('Participants data is not an array:', participants);
-      return NextResponse.json(
-        { error: 'Invalid participants data format' },
-        { status: 500 }
+    // Update data peserta di database
+    for (const challongeParticipant of challongeParticipants) {
+      const participant = challongeParticipant.participant;
+      const localParticipant = localParticipants.find(
+        lp => lp.challonge_id.toString() === participant.id.toString()
       );
+
+      if (localParticipant) {
+        // Update peserta yang sudah ada
+        await supabase
+          .from('bracket_participants')
+          .update({
+            name: participant.name,
+            seed: participant.seed,
+            final_rank: participant.final_rank,
+            updated_at: new Date().toISOString()
+          })
+          .eq('challonge_id', participant.id)
+          .eq('tournament_id', tournamentId);
+      } else {
+        // Tambah peserta baru yang belum ada di database
+        await supabase
+          .from('bracket_participants')
+          .insert([
+            {
+              id: participant.id,
+              challonge_id: participant.id,
+              tournament_id: tournamentId,
+              name: participant.name,
+              seed: participant.seed,
+              final_rank: participant.final_rank
+            }
+          ]);
+      }
     }
 
-    // Calculate wins and losses for each participant
-    const standings = participants.map(p => {
-      // Pastikan p.participant ada sebelum mengakses propertinya
-      if (!p.participant) {
-        console.error('Invalid participant data structure:', p);
-        // Coba gunakan p langsung jika sepertinya itu adalah objek participant
-        if (p && typeof p === 'object' && (p.id || p.participant_id)) {
-          p = { participant: p };
-        } else {
-          return null;
-        }
-      }
-
-      const participantData = p.participant;
-      
-      // Pastikan kita memiliki ID yang valid
-      const participantId = participantData.id;
-      if (!participantId) {
-        console.error('Participant has no valid ID:', participantData);
-        return null;
-      }
-
-      // Cari pertandingan untuk peserta ini
-      const participantMatches = matches ? matches.filter(m => 
-        m.match && (
-          m.match.player1_id === participantId || 
-          m.match.player2_id === participantId
-        )
-      ) : [];
-
-      const wins = participantMatches.filter(m => 
-        m.match && 
-        m.match.winner_id === participantId && 
-        m.match.state === 'complete'
-      ).length;
-
-      const losses = participantMatches.filter(m => 
-        m.match && 
-        m.match.loser_id === participantId && 
-        m.match.state === 'complete'
-      ).length;
-
-      // Ambil nama dari display_name jika name tidak ada
-      const name = participantData.name || participantData.display_name || 'Unnamed';
-      
-      // Pastikan seed selalu ada, bahkan jika null
-      const seed = participantData.seed !== undefined ? participantData.seed : null;
-
-      return {
-        participant: {
-          id: participantId,
-          name: name,
-          email: participantData.email || '',
-          seed: seed,
-          rank: participantData.final_rank || seed,
-          wins,
-          losses,
-          display_name: participantData.display_name || name
-        }
-      };
-    }).filter(p => p !== null); // Filter out any null entries
-
-
-    // Urutkan berdasarkan seed
-    const sortedStandings = standings.sort((a, b) => {
-      const seedA = a.participant && a.participant.seed ? a.participant.seed : Infinity;
-      const seedB = b.participant && b.participant.seed ? b.participant.seed : Infinity;
-      return seedA - seedB;
-    });
-
-    return NextResponse.json(sortedStandings);
-  } catch (error) {
-    console.error('Error fetching standings:', error);
-    console.error('Error details:', error.response?.data || error.message);
-    return NextResponse.json(
-      { error: `Failed to fetch standings: ${error.message}` },
-      { status: error.response?.status || 500 }
+    // Hapus peserta yang sudah tidak ada di Challonge
+    const challongeIds = challongeParticipants.map(cp => cp.participant.id.toString());
+    const deletedParticipants = localParticipants.filter(
+      lp => !challongeIds.includes(lp.challonge_id.toString())
     );
+
+    for (const deletedParticipant of deletedParticipants) {
+      await supabase
+        .from('bracket_participants')
+        .delete()
+        .eq('challonge_id', deletedParticipant.challonge_id)
+        .eq('tournament_id', tournamentId);
+    }
+  } catch (error) {
+    console.error('Error syncing participants with Challonge:', error);
   }
 }
 

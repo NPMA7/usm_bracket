@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
 
 export default function TournamentList({ refreshTrigger, onTournamentSelect }) {
   const [tournaments, setTournaments] = useState([]);
@@ -13,14 +14,26 @@ export default function TournamentList({ refreshTrigger, onTournamentSelect }) {
     const fetchTournaments = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch('/api/challonge');
+        // Ambil data langsung dari database Supabase
+        const { data, error } = await supabase
+          .from('bracket_tournaments')
+          .select('*')
+          .order('created_at', { ascending: false });
         
-        if (!response.ok) {
-          throw new Error('Gagal mengambil data turnamen');
+        if (error) {
+          throw new Error('Gagal mengambil data turnamen dari database');
         }
         
-        const data = await response.json();
-        setTournaments(data);
+        // Format data untuk kompatibilitas dengan komponen yang ada
+        const formattedData = data.map(tournament => ({
+          tournament: {
+            ...tournament,
+            id: tournament.challonge_id,
+            local_data: tournament
+          }
+        }));
+        
+        setTournaments(formattedData);
       } catch (err) {
         setError(err.message);
         console.error('Error in TournamentList:', err);

@@ -35,6 +35,7 @@ export default function RootLayout({ children }) {
         />
             <LoginToast />
         {children}
+        <div id="modal-root"></div>
       </body>
     </html>
   );

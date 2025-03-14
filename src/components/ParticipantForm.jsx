@@ -39,7 +39,8 @@ export default function ParticipantForm({ tournamentId, onParticipantAdded }) {
           },
           body: JSON.stringify({
             tournamentId,
-            ...formData,
+            name: formData.name,
+            email: formData.email,
           }),
         });
 

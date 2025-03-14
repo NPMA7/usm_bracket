@@ -21,9 +21,11 @@ export default function TournamentBracket({ tournamentId }) {
           throw new Error('Gagal mengambil data turnamen');
         }
         const tournamentData = await tournamentResponse.json();
-        // Find the tournament with the matching ID
+        
+        // Jika tournamentData adalah array, cari turnamen dengan ID yang sesuai
+        // Jika bukan array, gunakan langsung
         const tournament = Array.isArray(tournamentData) 
-          ? tournamentData.find(t => t.tournament.id.toString() === tournamentId)
+          ? tournamentData.find(t => t.id.toString() === tournamentId)
           : tournamentData;
           
         if (!tournament) {
@@ -33,9 +35,9 @@ export default function TournamentBracket({ tournamentId }) {
         setTournament(tournament);
         
         // Cek status turnamen
-        const isStarted = tournament.tournament.state !== 'pending';
+        const isStarted = tournament.state !== 'pending';
         setTournamentStarted(isStarted);
-        setTournamentStatus(tournament.tournament.state);
+        setTournamentStatus(tournament.state);
         
         // Fetch matches
         const matchesResponse = await fetch(`/api/challonge/matches?tournamentId=${tournamentId}`);
@@ -76,13 +78,13 @@ export default function TournamentBracket({ tournamentId }) {
 
   const getParticipantName = (id) => {
     if (!id) return 'TBD';
-    const participant = participants.find(p => p.participant.id === id);
-    return participant ? participant.participant.name : 'Unknown';
+    const participant = participants.find(p => p.id === id);
+    return participant ? participant.name : 'Unknown';
   };
 
   const getMatchResult = (match) => {
-    if (!match.match.winner_id) return 'vs';
-    return match.match.scores_csv || 'Selesai';
+    if (!match.winner_id) return 'vs';
+    return match.scores_csv || 'Selesai';
   };
 
   // Group matches by round
@@ -91,7 +93,7 @@ export default function TournamentBracket({ tournamentId }) {
     // Pastikan matches adalah array sebelum memanggil forEach
     if (Array.isArray(matches)) {
       matches.forEach(match => {
-        const round = match.match.round;
+        const round = match.round;
         if (!grouped[round]) {
           grouped[round] = [];
         }
@@ -119,9 +121,9 @@ export default function TournamentBracket({ tournamentId }) {
 
   // Fungsi untuk mendapatkan warna status pertandingan
   const getMatchStatusColor = (match) => {
-    if (match.match.state === 'complete') {
+    if (match.state === 'complete') {
       return 'border-green-500';
-    } else if (match.match.state === 'open') {
+    } else if (match.state === 'open') {
       return 'border-blue-500';
     } else {
       return 'border-gray-300';
@@ -137,7 +139,7 @@ export default function TournamentBracket({ tournamentId }) {
         <h2 className="text-2xl font-bold">Bracket Turnamen</h2>
         {tournament && (
           <a 
-            href={tournament.tournament.live_image_url} 
+            href={tournament.live_image_url} 
             target="_blank" 
             rel="noopener noreferrer"
             className="text-blue-500 hover:underline flex items-center"
@@ -190,24 +192,24 @@ export default function TournamentBracket({ tournamentId }) {
                 <div className="space-y-8 relative">
                   {roundsMatches[round].map((match, index) => (
                     <div 
-                      key={match.match.id} 
+                      key={match.id} 
                       className={`border-2 rounded-lg p-3 bg-white dark:bg-gray-800 shadow-sm ${getMatchStatusColor(match)}`}
                     >
-                      <div className={`p-2 rounded ${match.match.player1_id === match.match.winner_id ? 'bg-green-100 dark:bg-green-800 font-bold' : ''}`}>
-                        {getParticipantName(match.match.player1_id)}
+                      <div className={`p-2 rounded ${match.player1_id === match.winner_id ? 'bg-green-100 dark:bg-green-800 font-bold' : ''}`}>
+                        {getParticipantName(match.player1_id)}
                       </div>
                       
                       <div className="text-center text-sm py-1 font-semibold">
                         {getMatchResult(match)}
                       </div>
                       
-                      <div className={`p-2 rounded ${match.match.player2_id === match.match.winner_id ? 'bg-green-100 dark:bg-green-800 font-bold' : ''}`}>
-                        {getParticipantName(match.match.player2_id)}
+                      <div className={`p-2 rounded ${match.player2_id === match.winner_id ? 'bg-green-100 dark:bg-green-800 font-bold' : ''}`}>
+                        {getParticipantName(match.player2_id)}
                       </div>
                       
                       <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex justify-between">
-                        <span>Match #{match.match.identifier}</span>
-                        <span>{match.match.state === 'complete' ? '✓ Selesai' : match.match.state === 'open' ? '⚡ Aktif' : '⏳ Menunggu'}</span>
+                        <span>Match #{match.identifier}</span>
+                        <span>{match.state === 'complete' ? '✓ Selesai' : match.state === 'open' ? '⚡ Aktif' : '⏳ Menunggu'}</span>
                       </div>
                     </div>
                   ))}
@@ -228,15 +230,15 @@ export default function TournamentBracket({ tournamentId }) {
           ) : (
             participants.map(participant => (
               <div 
-                key={participant.participant.id}
+                key={participant.id}
                 className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-700 hover:shadow-md transition"
               >
-                <div className="font-medium text-lg">{participant.participant.name}</div>
+                <div className="font-medium text-lg">{participant.name}</div>
                 <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  <div>Seed: {participant.participant.seed || 'N/A'}</div>
-                  {participant.participant.final_rank && (
+                  <div>Seed: {participant.seed || 'N/A'}</div>
+                  {participant.final_rank && (
                     <div className="font-semibold text-blue-600 dark:text-blue-400">
-                      Peringkat Akhir: #{participant.participant.final_rank}
+                      Peringkat Akhir: #{participant.final_rank}
                     </div>
                   )}
                 </div>
@@ -246,15 +248,15 @@ export default function TournamentBracket({ tournamentId }) {
         </div>
       </div>
 
-      {tournament && tournament.tournament.state === 'complete' && (
+      {tournament && tournament.state === 'complete' && (
         <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
           <h3 className="text-xl font-semibold mb-4">Hasil Akhir Turnamen</h3>
           <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg">
             <div className="text-center">
               <p className="text-lg font-bold mb-2">Pemenang</p>
-              {participants.filter(p => p.participant.final_rank === 1).map(winner => (
-                <div key={winner.participant.id} className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {winner.participant.name}
+              {participants.filter(p => p.final_rank === 1).map(winner => (
+                <div key={winner.id} className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {winner.name}
                 </div>
               ))}
             </div>
@@ -262,20 +264,20 @@ export default function TournamentBracket({ tournamentId }) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
               <div className="text-center">
                 <p className="font-semibold mb-1">Juara 1</p>
-                {participants.filter(p => p.participant.final_rank === 1).map(p => (
-                  <div key={p.participant.id}>{p.participant.name}</div>
+                {participants.filter(p => p.final_rank === 1).map(p => (
+                  <div key={p.id}>{p.name}</div>
                 ))}
               </div>
               <div className="text-center">
                 <p className="font-semibold mb-1">Juara 2</p>
-                {participants.filter(p => p.participant.final_rank === 2).map(p => (
-                  <div key={p.participant.id}>{p.participant.name}</div>
+                {participants.filter(p => p.final_rank === 2).map(p => (
+                  <div key={p.id}>{p.name}</div>
                 ))}
               </div>
               <div className="text-center">
                 <p className="font-semibold mb-1">Juara 3</p>
-                {participants.filter(p => p.participant.final_rank === 3).map(p => (
-                  <div key={p.participant.id}>{p.participant.name}</div>
+                {participants.filter(p => p.final_rank === 3).map(p => (
+                  <div key={p.id}>{p.name}</div>
                 ))}
               </div>
             </div>

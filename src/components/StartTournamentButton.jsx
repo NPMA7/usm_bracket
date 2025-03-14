@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
 
 export default function StartTournamentButton({ tournamentId, onTournamentStarted, disabled }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -15,24 +16,26 @@ export default function StartTournamentButton({ tournamentId, onTournamentStarte
     setSuccess(false);
     
     try {
-      const response = await fetch('/api/challonge/start', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ tournamentId }),
-      });
+      // Update status turnamen di database menggunakan Supabase
+      const { data, error } = await supabase
+        .from('bracket_tournaments')
+        .update({
+          state: 'underway',
+          started_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('challonge_id', tournamentId)
+        .select()
+        .single();
       
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Gagal memulai turnamen');
+      if (error) {
+        throw new Error(error.message || 'Gagal memulai turnamen');
       }
       
       setSuccess(true);
       
       if (onTournamentStarted) {
-        onTournamentStarted(data.tournament);
+        onTournamentStarted(data);
       }
       
       // Reload halaman setelah 2 detik

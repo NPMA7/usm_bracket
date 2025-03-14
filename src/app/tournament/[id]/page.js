@@ -3,11 +3,11 @@
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import BracketImage from "@/components/BracketImage";
-import EditParticipantPositionModal from "@/components/EditParticipantPositionModal";
-import TournamentHeader from "@/components/TournamentHeader";
 import TournamentInfoCard from "@/components/TournamentInfoCard";
 import FinalResultBox from "@/components/FinalResultBox";
 import StandingsTable from "@/components/StandingsTable";
+import EditParticipantPositionModal from "@/components/EditParticipantPositionModal";
+import { supabase } from '@/lib/supabase';
 
 export default function TournamentDetail({ params }) {
   const unwrappedParams = use(params);
@@ -22,11 +22,11 @@ export default function TournamentDetail({ params }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [shuffleSuccess, setShuffleSuccess] = useState(false);
   const [bracketImageKey, setBracketImageKey] = useState(0);
-  const [showEditPositionModal, setShowEditPositionModal] = useState(false);
   const [matches, setMatches] = useState([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [user, setUser] = useState(null);
+  const [showEditPositionModal, setShowEditPositionModal] = useState(false);
 
   useEffect(() => {
     const adminUser = localStorage.getItem("adminUser");
@@ -73,25 +73,31 @@ export default function TournamentDetail({ params }) {
 
       setIsLoading(true);
       try {
-        // Fetch tournament details
-        const response = await fetch(`/api/challonge?tournamentId=${id}`);
-
-        if (!response.ok) {
+        // Fetch tournament details from database
+        const { data: tournamentData, error: tournamentError } = await supabase
+          .from('bracket_tournaments')
+          .select('*')
+          .eq('challonge_id', id)
+          .single();
+        
+        if (tournamentError) {
           throw new Error("Gagal mengambil data turnamen");
         }
 
-        const data = await response.json();
-        const tournamentData = Array.isArray(data)
-          ? data.find((t) => t.tournament.id.toString() === id)
-          : data;
+        // Format data untuk kompatibilitas dengan komponen yang ada
+        const formattedTournament = {
+          name: tournamentData.name,
+          state: tournamentData.state,
+          participants_count: tournamentData.participants_count || 0,
+          created_at: tournamentData.created_at,
+          tournament_type: tournamentData.tournament_type,
+          game_name: tournamentData.game_name,
+          full_challonge_url: tournamentData.full_challonge_url
+        };
 
-        if (!tournamentData) {
-          throw new Error("Turnamen tidak ditemukan");
-        }
-
-        setTournament(tournamentData);
-        setTournamentStarted(tournamentData.tournament.state !== "pending");
-        setParticipantsCount(tournamentData.tournament.participants_count || 0);
+        setTournament(formattedTournament);
+        setTournamentStarted(tournamentData.state !== "pending");
+        setParticipantsCount(tournamentData.participants_count || 0);
 
         // Fetch standings data
         await fetchStandings(id);
@@ -117,21 +123,32 @@ export default function TournamentDetail({ params }) {
    */
   const fetchStandingsQuiet = async (tournamentId) => {
     try {
-      const standingsResponse = await fetch(
-        `/api/challonge/participants?tournamentId=${tournamentId}`
-      );
-      if (!standingsResponse.ok) {
+      const { data: standingsData, error: standingsError } = await supabase
+        .from('bracket_participants')
+        .select('*')
+        .eq('tournament_id', tournamentId)
+        .order('final_rank', { nullsLast: true });
+
+      if (standingsError) {
         throw new Error("Gagal mengambil data standings");
       }
-      const standingsData = await standingsResponse.json();
+
+      // Format data untuk kompatibilitas dengan komponen yang ada
+      const formattedStandings = standingsData.map(participant => ({
+        participant: {
+          ...participant,
+          id: participant.challonge_id,
+          tournament_id: participant.tournament_id,
+          local_data: participant
+        }
+      }));
 
       // Sort standings berdasarkan jumlah kemenangan (wins) dan kekalahan (losses)
-      const sortedStandings = standingsData.sort((a, b) => {
-        // Periksa apakah data menggunakan format baru (dengan objek participant)
-        const winsA = a.participant ? a.participant.wins || 0 : 0;
-        const winsB = b.participant ? b.participant.wins || 0 : 0;
-        const lossesA = a.participant ? a.participant.losses || 0 : 0;
-        const lossesB = b.participant ? b.participant.losses || 0 : 0;
+      const sortedStandings = formattedStandings.sort((a, b) => {
+        const winsA = a.participant.wins || 0;
+        const winsB = b.participant.wins || 0;
+        const lossesA = a.participant.losses || 0;
+        const lossesB = b.participant.losses || 0;
 
         // Tim dengan W 0 dan L 0 diletakkan di urutan paling bawah
         if (winsA === 0 && lossesA === 0 && (winsB > 0 || lossesB > 0)) {
@@ -160,21 +177,32 @@ export default function TournamentDetail({ params }) {
   const fetchStandings = async (tournamentId) => {
     setIsLoadingStandings(true);
     try {
-      const standingsResponse = await fetch(
-        `/api/challonge/participants?tournamentId=${tournamentId}`
-      );
-      if (!standingsResponse.ok) {
+      const { data: standingsData, error: standingsError } = await supabase
+        .from('bracket_participants')
+        .select('*')
+        .eq('tournament_id', tournamentId)
+        .order('final_rank', { nullsLast: true });
+
+      if (standingsError) {
         throw new Error("Gagal mengambil data standings");
       }
-      const standingsData = await standingsResponse.json();
+
+      // Format data untuk kompatibilitas dengan komponen yang ada
+      const formattedStandings = standingsData.map(participant => ({
+        participant: {
+          ...participant,
+          id: participant.challonge_id,
+          tournament_id: participant.tournament_id,
+          local_data: participant
+        }
+      }));
 
       // Sort standings berdasarkan jumlah kemenangan (wins) dan kekalahan (losses)
-      const sortedStandings = standingsData.sort((a, b) => {
-        // Periksa apakah data menggunakan format baru (dengan objek participant)
-        const winsA = a.participant ? a.participant.wins || 0 : 0;
-        const winsB = b.participant ? b.participant.wins || 0 : 0;
-        const lossesA = a.participant ? a.participant.losses || 0 : 0;
-        const lossesB = b.participant ? b.participant.losses || 0 : 0;
+      const sortedStandings = formattedStandings.sort((a, b) => {
+        const winsA = a.participant.wins || 0;
+        const winsB = b.participant.wins || 0;
+        const lossesA = a.participant.losses || 0;
+        const lossesB = b.participant.losses || 0;
 
         // Tim dengan W 0 dan L 0 diletakkan di urutan paling bawah
         if (winsA === 0 && lossesA === 0 && (winsB > 0 || lossesB > 0)) {
@@ -205,14 +233,27 @@ export default function TournamentDetail({ params }) {
   const fetchMatches = async (tournamentId) => {
     setIsLoadingMatches(true);
     try {
-      const matchesResponse = await fetch(
-        `/api/challonge/matches?tournamentId=${tournamentId}`
-      );
-      if (!matchesResponse.ok) {
+      const { data: matchesData, error: matchesError } = await supabase
+        .from('bracket_matches')
+        .select('*')
+        .eq('tournament_id', tournamentId)
+        .order('suggested_play_order', { nullsLast: true });
+
+      if (matchesError) {
         throw new Error("Gagal mengambil data matches");
       }
-      const matchesData = await matchesResponse.json();
-      setMatches(matchesData);
+
+      // Format data untuk kompatibilitas dengan komponen yang ada
+      const formattedMatches = matchesData.map(match => ({
+        match: {
+          ...match,
+          id: match.challonge_id,
+          tournament_id: match.tournament_id,
+          local_data: match
+        }
+      }));
+
+      setMatches(formattedMatches);
     } catch (err) {
       console.error("Error fetching matches:", err);
     } finally {
@@ -229,11 +270,17 @@ export default function TournamentDetail({ params }) {
 
     setIsProcessing(true);
     try {
-      const response = await fetch(`/api/challonge/tournaments/${id}/start`, {
-        method: "POST",
-      });
+      // Update status turnamen di database
+      const { error: updateError } = await supabase
+        .from('bracket_tournaments')
+        .update({
+          state: 'underway',
+          started_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('challonge_id', id);
 
-      if (!response.ok) {
+      if (updateError) {
         throw new Error("Gagal memulai turnamen");
       }
 
@@ -260,14 +307,17 @@ export default function TournamentDetail({ params }) {
 
     setIsProcessing(true);
     try {
-      const response = await fetch(
-        `/api/challonge/tournaments/${id}/finalize`,
-        {
-          method: "POST",
-        }
-      );
+      // Update status turnamen di database
+      const { error: updateError } = await supabase
+        .from('bracket_tournaments')
+        .update({
+          state: 'complete',
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('challonge_id', id);
 
-      if (!response.ok) {
+      if (updateError) {
         throw new Error("Gagal menyelesaikan turnamen");
       }
 
@@ -342,29 +392,36 @@ export default function TournamentDetail({ params }) {
    */
   const checkTournamentStatus = async (tournamentId) => {
     try {
-      const response = await fetch(
-        `/api/challonge?tournamentId=${tournamentId}`
-      );
-      if (!response.ok) {
-        throw new Error("Gagal mengambil data turnamen");
+      const { data: tournamentData, error: tournamentError } = await supabase
+        .from('bracket_tournaments')
+        .select('*')
+        .eq('challonge_id', tournamentId)
+        .single();
+
+      if (tournamentError) {
+        throw new Error("Gagal memeriksa status turnamen");
       }
 
-      const data = await response.json();
-      const tournamentData = Array.isArray(data)
-        ? data.find((t) => t.tournament.id.toString() === tournamentId)
-        : data;
+      // Format data untuk kompatibilitas dengan komponen yang ada
+      const formattedTournament = {
+        name: tournamentData.name,
+        state: tournamentData.state,
+        participants_count: tournamentData.participants_count || 0,
+        created_at: tournamentData.created_at,
+        tournament_type: tournamentData.tournament_type,
+        game_name: tournamentData.game_name,
+        full_challonge_url: tournamentData.full_challonge_url
+      };
 
-      if (tournamentData) {
-        setTournament(tournamentData);
-        setTournamentStarted(tournamentData.tournament.state !== "pending");
+      setTournament(formattedTournament);
+      setTournamentStarted(tournamentData.state !== "pending");
 
-        // Jika turnamen baru saja selesai, refresh standings tanpa loading
-        if (
-          tournamentData.tournament.state === "complete" &&
-          tournament?.tournament?.state !== "complete"
-        ) {
-          await fetchStandingsQuiet(tournamentId);
-        }
+      // Jika turnamen baru saja selesai, refresh standings tanpa loading
+      if (
+        tournamentData.state === "complete" &&
+        tournament?.tournament?.state !== "complete"
+      ) {
+        await fetchStandingsQuiet(tournamentId);
       }
     } catch (err) {
       console.error("Error checking tournament status:", err);
@@ -386,6 +443,13 @@ export default function TournamentDetail({ params }) {
 
   return (
     <div className="min-h-screen bg-[#1a1a1a]">
+      <EditParticipantPositionModal
+        isOpen={showEditPositionModal}
+        onClose={() => setShowEditPositionModal(false)}
+        tournamentId={id}
+        onSuccess={handleEditPositionSuccess}
+      />
+      
       <div className="bg-[#2b2b2b] border-b border-gray-700">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <Link
@@ -430,16 +494,18 @@ export default function TournamentDetail({ params }) {
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        <TournamentInfoCard
-          tournament={tournament}
-          tournamentStarted={tournamentStarted}
-          participantsCount={participantsCount}
-          id={id}
-          onTournamentStarted={handleTournamentStarted}
-          isAdmin={isAdmin}
-        />
+        {tournament && (
+          <TournamentInfoCard
+            tournament={tournament}
+            tournamentStarted={tournamentStarted}
+            participantsCount={participantsCount}
+            id={id}
+            onTournamentStarted={handleTournamentStarted}
+            isAdmin={user && ['admin', 'owner'].includes(user.role)}
+          />
+        )}
 
-        {tournament.tournament.state === "complete" && standings.length > 0 && (
+        {tournament && tournament.state === "complete" && standings.length > 0 && (
           <FinalResultBox standings={standings} />
         )}
 
@@ -474,7 +540,7 @@ export default function TournamentDetail({ params }) {
                     Tipe Turnamen
                   </label>
                   <p className="text-white">
-                    {tournament.tournament.tournament_type}
+                    {tournament.tournament_type}
                   </p>
                 </div>
                 <div>
@@ -482,7 +548,7 @@ export default function TournamentDetail({ params }) {
                     Game
                   </label>
                   <p className="text-white">
-                    {tournament.tournament.game_name || "Tidak ditentukan"}
+                    {tournament.game_name || "Tidak ditentukan"}
                   </p>
                 </div>
                 <div>
@@ -491,7 +557,7 @@ export default function TournamentDetail({ params }) {
                   </label>
                   <p className="text-white">
                     {new Date(
-                      tournament.tournament.updated_at
+                      tournament.updated_at
                     ).toLocaleDateString("id-ID", {
                       day: "numeric",
                       month: "long",
@@ -504,7 +570,7 @@ export default function TournamentDetail({ params }) {
                     URL Challonge
                   </label>
                   <a
-                    href={tournament.tournament.full_challonge_url}
+                    href={tournament.full_challonge_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[#f26522] hover:text-[#ff7b3d] transition-colors"
@@ -559,14 +625,30 @@ export default function TournamentDetail({ params }) {
                   >
                     Kelola Pertandingan
                   </Link>
+
+                  {/* Tombol Edit Posisi dan Shuffle hanya muncul jika turnamen belum dimulai */}
                   {!tournamentStarted && (
-                    <button
-                      onClick={handleStartTournament}
-                      disabled={participantsCount < 2 || isProcessing}
-                      className="block w-full bg-[#f26522] hover:bg-[#ff7b3d] text-white px-4 py-2 rounded-lg text-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isProcessing ? "Memulai..." : "Mulai Turnamen"}
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setShowEditPositionModal(true)}
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg"
+                        disabled={isProcessing}
+                      >
+                        Edit Posisi Tim
+                      </button>
+                      <button
+                        onClick={handleShuffleTournament}
+                        className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg"
+                        disabled={isProcessing}
+                      >
+                        {isProcessing ? "Sedang Mengacak..." : "Shuffle Tim"}
+                      </button>
+                      {shuffleSuccess && (
+                        <div className="mt-2 text-green-400 text-sm text-center">
+                          Berhasil mengacak urutan peserta!
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -613,7 +695,7 @@ export default function TournamentDetail({ params }) {
                     >
                       <path
                         fillRule="evenodd"
-                        d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+                        d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
                         clipRule="evenodd"
                       />
                     </svg>
@@ -637,15 +719,6 @@ export default function TournamentDetail({ params }) {
           </div>
         </div>
       </div>
-
-      {isAdmin && (
-        <EditParticipantPositionModal
-          isOpen={showEditPositionModal}
-          onClose={() => setShowEditPositionModal(false)}
-          tournamentId={id}
-          onSuccess={handleEditPositionSuccess}
-        />
-      )}
     </div>
   );
 }
