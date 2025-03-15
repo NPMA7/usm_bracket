@@ -195,7 +195,7 @@ function UsersManagement() {
         }}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+      <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
         <StatCard
           icon={
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">

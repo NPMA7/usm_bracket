@@ -121,47 +121,92 @@ export default function TournamentDetail({ params }) {
    */
   const fetchStandingsQuiet = async (tournamentId) => {
     try {
-      const { data: standingsData, error: standingsError } = await supabase
+      // Ambil data peserta
+      const { data: participantsData, error: participantsError } = await supabase
         .from('bracket_participants')
         .select('*')
         .eq('tournament_id', tournamentId)
-        .order('final_rank', { nullsLast: true });
+        .order('seed', { nullsLast: true });
 
-      if (standingsError) {
-        throw new Error("Gagal mengambil data standings");
+      if (participantsError) {
+        throw new Error("Gagal mengambil data peserta");
       }
 
-      // Format data untuk kompatibilitas dengan komponen yang ada
-      const formattedStandings = standingsData.map(participant => ({
+      // Ambil data pertandingan
+      const { data: matchesData, error: matchesError } = await supabase
+        .from('bracket_matches')
+        .select('*')
+        .eq('tournament_id', tournamentId);
+
+      if (matchesError) {
+        throw new Error("Gagal mengambil data pertandingan");
+      }
+
+      // Format data peserta
+      const formattedParticipants = participantsData.map(participant => ({
         participant: {
           ...participant,
           id: participant.challonge_id,
           tournament_id: participant.tournament_id,
-          local_data: participant
+          wins: 0,
+          losses: 0,
+          matches_played: 0,
+          score_difference: 0
         }
       }));
 
-      // Sort standings berdasarkan jumlah kemenangan (wins) dan kekalahan (losses)
-      const sortedStandings = formattedStandings.sort((a, b) => {
-        const winsA = a.participant.wins || 0;
-        const winsB = b.participant.wins || 0;
-        const lossesA = a.participant.losses || 0;
-        const lossesB = b.participant.losses || 0;
+      // Hitung statistik dari pertandingan
+      matchesData.forEach(match => {
+        if (match.state === 'complete') {
+          const winner = match.winner_id;
+          const loser = match.loser_id;
+          
+          // Update statistik pemenang
+          const winnerStanding = formattedParticipants.find(s => s.participant.id === winner);
+          if (winnerStanding) {
+            winnerStanding.participant.wins += 1;
+            winnerStanding.participant.matches_played += 1;
+          }
 
-        // Tim dengan W 0 dan L 0 diletakkan di urutan paling bawah
-        if (winsA === 0 && lossesA === 0 && (winsB > 0 || lossesB > 0)) {
-          return 1; // A di bawah B
-        }
-        if (winsB === 0 && lossesB === 0 && (winsA > 0 || lossesA > 0)) {
-          return -1; // B di bawah A
-        }
+          // Update statistik yang kalah
+          const loserStanding = formattedParticipants.find(s => s.participant.id === loser);
+          if (loserStanding) {
+            loserStanding.participant.losses += 1;
+            loserStanding.participant.matches_played += 1;
+          }
 
-        // Jika keduanya W 0 dan L 0 atau keduanya bukan W 0 dan L 0, urutkan berdasarkan wins
-        return winsB - winsA;
+          // Hitung selisih skor jika ada
+          if (match.scores_csv) {
+            const scores = match.scores_csv.split(',').map(score => {
+              const [score1, score2] = score.split('-').map(Number);
+              return { score1, score2 };
+            });
+
+            if (winnerStanding && loserStanding) {
+              const totalScore1 = scores.reduce((sum, s) => sum + s.score1, 0);
+              const totalScore2 = scores.reduce((sum, s) => sum + s.score2, 0);
+              winnerStanding.participant.score_difference += Math.max(totalScore1, totalScore2);
+              loserStanding.participant.score_difference += Math.min(totalScore1, totalScore2);
+            }
+          }
+        }
+      });
+
+      // Urutkan standings berdasarkan:
+      // 1. Jumlah kemenangan (descending)
+      // 2. Selisih skor (descending)
+      // 3. Jumlah pertandingan (ascending)
+      const sortedStandings = formattedParticipants.sort((a, b) => {
+        if (a.participant.wins !== b.participant.wins) {
+          return b.participant.wins - a.participant.wins;
+        }
+        if (a.participant.score_difference !== b.participant.score_difference) {
+          return b.participant.score_difference - a.participant.score_difference;
+        }
+        return a.participant.matches_played - b.participant.matches_played;
       });
 
       setStandings(sortedStandings);
-      // Set waktu terakhir refresh
       setLastRefreshed(new Date());
     } catch (err) {
       console.error("Error fetching standings quietly:", err);
@@ -175,48 +220,8 @@ export default function TournamentDetail({ params }) {
   const fetchStandings = async (tournamentId) => {
     setIsLoadingStandings(true);
     try {
-      const { data: standingsData, error: standingsError } = await supabase
-        .from('bracket_participants')
-        .select('*')
-        .eq('tournament_id', tournamentId)
-        .order('final_rank', { nullsLast: true });
-
-      if (standingsError) {
-        throw new Error("Gagal mengambil data standings");
-      }
-
-      // Format data untuk kompatibilitas dengan komponen yang ada
-      const formattedStandings = standingsData.map(participant => ({
-        participant: {
-          ...participant,
-          id: participant.challonge_id,
-          tournament_id: participant.tournament_id,
-          local_data: participant
-        }
-      }));
-
-      // Sort standings berdasarkan jumlah kemenangan (wins) dan kekalahan (losses)
-      const sortedStandings = formattedStandings.sort((a, b) => {
-        const winsA = a.participant.wins || 0;
-        const winsB = b.participant.wins || 0;
-        const lossesA = a.participant.losses || 0;
-        const lossesB = b.participant.losses || 0;
-
-        // Tim dengan W 0 dan L 0 diletakkan di urutan paling bawah
-        if (winsA === 0 && lossesA === 0 && (winsB > 0 || lossesB > 0)) {
-          return 1; // A di bawah B
-        }
-        if (winsB === 0 && lossesB === 0 && (winsA > 0 || lossesA > 0)) {
-          return -1; // B di bawah A
-        }
-
-        // Jika keduanya W 0 dan L 0 atau keduanya bukan W 0 dan L 0, urutkan berdasarkan wins
-        return winsB - winsA;
-      });
-
-      setStandings(sortedStandings);
-      // Set waktu terakhir refresh
-      setLastRefreshed(new Date());
+      // Gunakan fungsi yang sama dengan fetchStandingsQuiet
+      await fetchStandingsQuiet(tournamentId);
     } catch (err) {
       console.error("Error fetching standings:", err);
     } finally {

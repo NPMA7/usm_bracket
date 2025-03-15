@@ -281,53 +281,89 @@ export default function TournamentParticipants(props) {
 
   const fetchStandingsQuiet = async (tournamentId) => {
     try {
-      const { data: standingsData, error: standingsError } = await supabase
+      // Ambil data peserta
+      const { data: participantsData, error: participantsError } = await supabase
         .from('bracket_participants')
         .select('*')
         .eq('tournament_id', tournamentId)
-        .order('final_rank', { nullsLast: true });
+        .order('seed', { nullsLast: true });
 
-      if (standingsError) {
-        throw new Error("Gagal mengambil data standings");
+      if (participantsError) {
+        throw new Error("Gagal mengambil data peserta");
       }
 
-      const formattedStandings = standingsData.map(participant => ({
+      // Ambil data pertandingan
+      const { data: matchesData, error: matchesError } = await supabase
+        .from('bracket_matches')
+        .select('*')
+        .eq('tournament_id', tournamentId);
+
+      if (matchesError) {
+        throw new Error("Gagal mengambil data pertandingan");
+      }
+
+      // Format data peserta
+      const formattedParticipants = participantsData.map(participant => ({
         participant: {
           ...participant,
           id: participant.challonge_id,
           tournament_id: participant.tournament_id,
-          local_data: participant
+          wins: 0,
+          losses: 0,
+          matches_played: 0,
+          score_difference: 0
         }
       }));
 
-      const sortedStandings = formattedStandings.sort((a, b) => {
-        const winsA = a.participant.wins || 0;
-        const winsB = b.participant.wins || 0;
-        const lossesA = a.participant.losses || 0;
-        const lossesB = b.participant.losses || 0;
-        const seedA = a.participant.seed || Number.MAX_SAFE_INTEGER;
-        const seedB = b.participant.seed || Number.MAX_SAFE_INTEGER;
+      // Hitung statistik dari pertandingan
+      matchesData.forEach(match => {
+        if (match.state === 'complete') {
+          const winner = match.winner_id;
+          const loser = match.loser_id;
+          
+          // Update statistik pemenang
+          const winnerStanding = formattedParticipants.find(s => s.participant.id === winner);
+          if (winnerStanding) {
+            winnerStanding.participant.wins += 1;
+            winnerStanding.participant.matches_played += 1;
+          }
 
-        // Jika kedua peserta belum memiliki pertandingan
-        if (winsA === 0 && lossesA === 0 && winsB === 0 && lossesB === 0) {
-          // Urutkan berdasarkan seed (seed lebih kecil di atas)
-          return seedA - seedB;
-        }
+          // Update statistik yang kalah
+          const loserStanding = formattedParticipants.find(s => s.participant.id === loser);
+          if (loserStanding) {
+            loserStanding.participant.losses += 1;
+            loserStanding.participant.matches_played += 1;
+          }
 
-        // Jika salah satu peserta belum bertanding
-        if (winsA === 0 && lossesA === 0 && (winsB > 0 || lossesB > 0)) {
-          return 1;
-        }
-        if (winsB === 0 && lossesB === 0 && (winsA > 0 || lossesA > 0)) {
-          return -1;
-        }
+          // Hitung selisih skor jika ada
+          if (match.scores_csv) {
+            const scores = match.scores_csv.split(',').map(score => {
+              const [score1, score2] = score.split('-').map(Number);
+              return { score1, score2 };
+            });
 
-        // Jika wins sama, urutkan berdasarkan seed
-        if (winsB === winsA) {
-          return seedA - seedB;
+            if (winnerStanding && loserStanding) {
+              const totalScore1 = scores.reduce((sum, s) => sum + s.score1, 0);
+              const totalScore2 = scores.reduce((sum, s) => sum + s.score2, 0);
+              winnerStanding.participant.score_difference += Math.max(totalScore1, totalScore2);
+              loserStanding.participant.score_difference += Math.min(totalScore1, totalScore2);
+            }
+          }
         }
+      });
 
-        return winsB - winsA;
+      // Urutkan standings berdasarkan:
+      // 1. Jumlah kemenangan (descending)
+      // 2. Selisih skor (descending)
+      // 3. Jumlah pertandingan (ascending)
+      const sortedStandings = formattedParticipants.sort((a, b) => {
+        if (a.participant.wins !== b.participant.wins) {
+          return b.participant.wins - a.participant.wins;
+        }
+        if (a.participant.score_difference !== b.participant.score_difference) {
+          return b.participant.score_difference - a.participant.score_difference;
+        }
+        return a.participant.matches_played - b.participant.matches_played;
       });
 
       setStandings(sortedStandings);
@@ -340,6 +376,7 @@ export default function TournamentParticipants(props) {
   const fetchStandings = async (tournamentId) => {
     setIsLoadingStandings(true);
     try {
+      // Gunakan fungsi yang sama dengan fetchStandingsQuiet
       await fetchStandingsQuiet(tournamentId);
     } catch (err) {
       console.error("Error fetching standings:", err);
@@ -694,7 +731,7 @@ export default function TournamentParticipants(props) {
                     viewBox="0 0 20 20"
                     fill="currentColor"
                   >
-                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
                   </svg>
                   <span className="text-sm">{isRefreshingBracket ? 'Memuat...' : 'Refresh'}</span>
                 </button>

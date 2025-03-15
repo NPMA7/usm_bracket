@@ -18,7 +18,17 @@ const UpdateMatchForm = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-[#2b2b2b] rounded-lg p-6 max-w-2xl w-full mx-4">
+      <div className="bg-[#2b2b2b] rounded-lg p-6 max-w-2xl w-full mx-4 relative">
+        {/* Loading Overlay */}
+        {isProcessing && (
+          <div className="absolute inset-0 bg-[#2b2b2b]/80 rounded-lg flex items-center justify-center z-50">
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#f26522] border-t-transparent mb-4"></div>
+              <p className="text-white text-sm">Memproses...</p>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-semibold text-white flex items-center">
             <svg
@@ -33,7 +43,8 @@ const UpdateMatchForm = ({
           </h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
+            disabled={isProcessing}
+            className="text-gray-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -67,7 +78,8 @@ const UpdateMatchForm = ({
               {!isComplete && (
                 <button
                   onClick={onAddSet}
-                  className="text-[#f26522] hover:text-[#ff7b3d] transition-colors text-sm flex items-center"
+                  disabled={isProcessing}
+                  className="text-[#f26522] hover:text-[#ff7b3d] transition-colors text-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -96,7 +108,7 @@ const UpdateMatchForm = ({
                     onChange={(e) =>
                       onSetChange(index, "player1", e.target.value === '' ? 0 : parseInt(e.target.value))
                     }
-                    disabled={isComplete}
+                    disabled={isComplete || isProcessing}
                     min="0"
                     className="bg-[#3b3b3b] text-white px-3 py-2 rounded-lg w-20 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
@@ -107,14 +119,15 @@ const UpdateMatchForm = ({
                     onChange={(e) =>
                       onSetChange(index, "player2", e.target.value === '' ? 0 : parseInt(e.target.value))
                     }
-                    disabled={isComplete}
+                    disabled={isComplete || isProcessing}
                     min="0"
                     className="bg-[#3b3b3b] text-white px-3 py-2 rounded-lg w-20 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   {!isComplete && scores.length > 1 && (
                     <button
                       onClick={() => onRemoveSet(index)}
-                      className="text-red-400 hover:text-red-300 transition-colors"
+                      disabled={isProcessing}
+                      className="text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -139,15 +152,14 @@ const UpdateMatchForm = ({
           <div className="flex justify-end space-x-4">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+              disabled={isProcessing}
+              className="px-4 py-2 text-gray-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Batal
             </button>
             {isComplete ? (
               <button
-                onClick={() => {
-                  onReopenMatch(selectedMatch);
-                }}
+                onClick={() => onReopenMatch(selectedMatch)}
                 disabled={isProcessing}
                 className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white px-4 py-2 rounded-lg transition-colors disabled:cursor-not-allowed flex items-center"
               >
@@ -169,7 +181,6 @@ const UpdateMatchForm = ({
               <button
                 onClick={() => {
                   onUpdateMatch();
-                  onClose();
                 }}
                 disabled={isProcessing}
                 className="bg-[#f26522] hover:bg-[#ff7b3d] disabled:bg-[#f26522]/50 text-white px-4 py-2 rounded-lg transition-colors disabled:cursor-not-allowed flex items-center"

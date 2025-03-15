@@ -36,8 +36,6 @@ export default function Header() {
         
         // Jika ada email, ambil data lengkap dari database
         if (userEmail) {
-          console.log('Fetching user data for email:', userEmail)
-          
           const { data: freshUserData, error } = await supabase
             .from('users')
             .select('*') // Ambil semua field termasuk avatar
@@ -47,8 +45,6 @@ export default function Header() {
           if (error) {
             console.error('Error fetching user data:', error)
           } else if (freshUserData) {
-            console.log('User data from database:', freshUserData)
-            
             // Update data user dengan data terbaru dari database
             setUser(freshUserData)
             
@@ -140,9 +136,6 @@ export default function Header() {
       </header>
     )
   }
-
-  // Debug: log user data untuk memeriksa apakah avatar ada
-  console.log('Current user data in Header:', user)
 
   return (
     <header className="bg-[#2b2b2b] border-b border-gray-700 fixed top-0 left-0 right-0 z-10">

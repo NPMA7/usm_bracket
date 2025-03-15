@@ -15,9 +15,7 @@ export async function PUT(request, { params }) {
 
   try {
     const body = await request.json();
-    console.log('Request body:', body); // Tambahkan logging
     const url = `https://api.challonge.com/v1/tournaments/${id}/matches/${matchId}.json?api_key=${CHALLONGE_API_KEY}`;
-    console.log('Sending request to:', url); // Tambahkan logging
 
     const response = await fetch(url, {
       method: 'PUT',
@@ -28,7 +26,6 @@ export async function PUT(request, { params }) {
       body: JSON.stringify(body)
     });
 
-    console.log('Response status:', response.status); // Tambahkan logging
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -37,7 +34,6 @@ export async function PUT(request, { params }) {
     }
 
     const data = await response.json();
-    console.log('Success response:', data); // Tambahkan logging
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error updating match in Challonge:', error);

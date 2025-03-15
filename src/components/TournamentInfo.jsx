@@ -5,6 +5,7 @@ const TournamentInfo = ({ tournament, title, description, matches = [], onStartT
   const [participantsCount, setParticipantsCount] = useState(0);
   const [localIsProcessing, setLocalIsProcessing] = useState(false);
   const [localTournament, setLocalTournament] = useState(tournament);
+  const [hasWinner, setHasWinner] = useState(false);
 
   // Tambahkan state untuk modal konfirmasi
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -165,6 +166,24 @@ const TournamentInfo = ({ tournament, title, description, matches = [], onStartT
     return colorMap[state] || "text-gray-500";
   };
 
+  // Fungsi untuk mengecek apakah turnamen sudah memiliki pemenang
+  const checkTournamentWinner = (matches) => {
+    if (!matches || !Array.isArray(matches)) return false;
+    
+    // Cari pertandingan final (biasanya memiliki round tertinggi)
+    const finalMatch = matches.reduce((highest, current) => {
+      return (current.match.round > highest.match.round) ? current : highest;
+    }, matches[0]);
+
+    // Jika ada final match dan memiliki winner_id, berarti sudah ada pemenang
+    return finalMatch && finalMatch.match.winner_id !== null;
+  };
+
+  useEffect(() => {
+    // Update hasWinner setiap kali matches berubah
+    setHasWinner(checkTournamentWinner(matches));
+  }, [matches]);
+
   return (
     <div className="bg-[#2b2b2b] rounded-lg shadow-xl mb-8 overflow-hidden">
       {/* Header */}
@@ -193,17 +212,22 @@ const TournamentInfo = ({ tournament, title, description, matches = [], onStartT
             {localTournament?.tournament?.state === "underway" && (
               <button
                 onClick={handleFinalizeTournament}
-                disabled={localIsProcessing || isProcessing}
+                disabled={localIsProcessing || isProcessing || !hasWinner}
                 className={`px-3 py-1 rounded-lg flex items-center space-x-1 ${
-                  localIsProcessing || isProcessing
+                  localIsProcessing || isProcessing || !hasWinner
                     ? 'bg-red-600/50 cursor-not-allowed'
                     : 'bg-red-600 hover:bg-red-700'
-                } text-white text-sm`}
+                } text-white text-sm group relative`}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
                 </svg>
                 <span>{localIsProcessing ? 'Menyelesaikan...' : 'Selesai'}</span>
+                {!hasWinner && (
+                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-3 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    Belum ada pemenang
+                  </div>
+                )}
               </button>
             )}
           </div>

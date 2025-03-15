@@ -9,15 +9,31 @@ import { formatDateIndonesia } from '@/lib/utils';
 
 export default function TournamentOptions() {
   const [tournaments, setTournaments] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [selectedTournament, setSelectedTournament] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [participantsCount, setParticipantsCount] = useState(0);
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
-    fetchTournaments();
+    // Periksa role user dari localStorage
+    const adminUser = localStorage.getItem('adminUser');
+    if (adminUser) {
+      const userData = JSON.parse(adminUser);
+      setIsOwner(userData.role === 'owner');
+    }
+  }, []);
+
+  useEffect(() => {
+    initialFetch();
+    const interval = setInterval(() => {
+      refreshData();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -25,6 +41,42 @@ export default function TournamentOptions() {
       fetchParticipantsCount(selectedTournament.id);
     }
   }, [selectedTournament, showDetailModal]);
+
+  const initialFetch = async () => {
+    setIsInitialLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('bracket_tournaments')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setTournaments(data);
+    } catch (err) {
+      setError('Gagal mengambil data turnamen');
+      console.error('Error:', err);
+    } finally {
+      setIsInitialLoading(false);
+    }
+  };
+
+  const refreshData = async () => {
+    setIsRefreshing(true);
+    try {
+      const { data, error } = await supabase
+        .from('bracket_tournaments')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setTournaments(data);
+    } catch (err) {
+      console.error('Error refreshing data:', err);
+      // Tidak menampilkan error untuk refresh otomatis
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const fetchParticipantsCount = async (tournamentId) => {
     try {
@@ -40,24 +92,6 @@ export default function TournamentOptions() {
     }
   };
 
-  const fetchTournaments = async () => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('bracket_tournaments')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setTournaments(data);
-    } catch (err) {
-      setError('Gagal mengambil data turnamen');
-      console.error('Error:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleEditClick = (tournament) => {
     setSelectedTournament(tournament);
     setShowEditModal(true);
@@ -70,7 +104,7 @@ export default function TournamentOptions() {
 
   return (
     <AdminLayout
-      loading={isLoading}
+      loading={isInitialLoading}
     >
       <div className="space-y-6">
         {/* Header Section */}
@@ -148,16 +182,18 @@ export default function TournamentOptions() {
                         </svg>
                         Detail
                       </button>
-                      <button
-                        onClick={() => handleEditClick(tournament)}
-                        className="inline-flex items-center gap-1.5 text-[#f26522] hover:text-[#f26522]/80 transition-colors"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
-                          <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
-                        </svg>
-                        Edit
-                      </button>
+                      {isOwner && (
+                        <button
+                          onClick={() => handleEditClick(tournament)}
+                          className="inline-flex items-center gap-1.5 text-[#f26522] hover:text-[#f26522]/80 transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
+                            <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+                          </svg>
+                          Edit
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -224,13 +260,31 @@ export default function TournamentOptions() {
               <div className="mt-6 flex justify-end gap-3">
                 <Link
                   href={`/admin/tournament/${selectedTournament.id}/participants`}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
+                  className={`${
+                    selectedTournament.state === 'underway' 
+                    ? 'bg-gray-500 cursor-not-allowed' 
+                    : 'bg-blue-500 hover:bg-blue-600'
+                  } text-white px-4 py-2 rounded-lg transition-colors`}
+                  onClick={(e) => {
+                    if (selectedTournament.state === 'underway') {
+                      e.preventDefault();
+                    }
+                  }}
                 >
                   Kelola Peserta
                 </Link>
                 <Link
                   href={`/admin/tournament/${selectedTournament.id}/matches`}
-                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors"
+                  className={`${
+                    selectedTournament.state === 'pending' 
+                    ? 'bg-gray-500 cursor-not-allowed' 
+                    : 'bg-green-500 hover:bg-green-600'
+                  } text-white px-4 py-2 rounded-lg transition-colors`}
+                  onClick={(e) => {
+                    if (selectedTournament.state === 'pending') {
+                      e.preventDefault();
+                    }
+                  }}
                 >
                   Kelola Pertandingan
                 </Link>
@@ -244,7 +298,7 @@ export default function TournamentOptions() {
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
         tournament={selectedTournament}
-        onSuccess={fetchTournaments}
+        onSuccess={refreshData}
       />
     </AdminLayout>
   );

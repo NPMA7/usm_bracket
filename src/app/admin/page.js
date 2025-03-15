@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from '@/components/admin/AdminLayout'
 import WelcomeCard from '@/components/admin/WelcomeCard'
+import DashboardStats from '@/components/admin/DashboardStats'
 
 function AdminDashboard() {
   const [userName, setUserName] = useState('Admin')
+  const [isLoading, setIsLoading] = useState(true)
   
   // Efek untuk mengambil data pengguna saat komponen dimuat
   useEffect(() => {
@@ -19,8 +21,10 @@ function AdminDashboard() {
             setUserName(userData.name)
           }
         }
+        setIsLoading(false)
       } catch (error) {
         console.error('Error getting user data:', error)
+        setIsLoading(false)
       }
     }
     
@@ -39,8 +43,17 @@ function AdminDashboard() {
   }, []);
 
   return (
-    <AdminLayout>
-      <WelcomeCard userName={userName} />
+    <AdminLayout loading={isLoading}>
+      <div className="grid grid-cols-1 gap-6">
+        {/* Kartu Selamat Datang */}
+        <WelcomeCard userName={userName} />
+        
+        {/* Statistik Dashboard */}
+        <div>
+          <h2 className="text-xl font-bold text-white mb-4">Statistik Website</h2>
+          <DashboardStats />
+        </div>
+      </div>
     </AdminLayout>
   )
 }

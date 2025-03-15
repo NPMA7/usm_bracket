@@ -2,11 +2,12 @@
 
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
-import TournamentHeader from "@/components/TournamentHeader";
+import AdminLayout from "@/components/admin/AdminLayout";
 import MatchesFilter from "@/components/MatchesFilter";
 import MatchesTable from "@/components/MatchesTable";
 import UpdateMatchForm from "@/components/UpdateMatchForm";
 import TournamentInfo from "@/components/TournamentInfo";
+import StandingsTable from "@/components/StandingsTable";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getCurrentWIBTime } from '@/lib/utils';
@@ -18,6 +19,7 @@ export default function TournamentMatches(props) {
   const [tournament, setTournament] = useState(null);
   const [matches, setMatches] = useState([]);
   const [participants, setParticipants] = useState([]);
+  const [standings, setStandings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedMatch, setSelectedMatch] = useState(null);
@@ -34,7 +36,74 @@ export default function TournamentMatches(props) {
   const [confirmMessage, setConfirmMessage] = useState("");
   const [confirmTitle, setConfirmTitle] = useState("");
 
-  // Fungsi untuk memperbarui data
+  // Fungsi untuk menghitung standings
+  const calculateStandings = (participants, matches) => {
+    if (!participants || !matches) return [];
+
+    // Inisialisasi data standings
+    const standingsData = participants.map(p => ({
+      participant: {
+        ...p.participant,
+        wins: 0,
+        losses: 0,
+        matches_played: 0,
+        score_difference: 0
+      }
+    }));
+
+    // Hitung statistik dari matches
+    matches.forEach(match => {
+      if (match.match.state === 'complete') {
+        const winner = match.match.winner_id;
+        const loser = match.match.loser_id;
+        
+        // Update statistik pemenang
+        const winnerStanding = standingsData.find(s => s.participant.id === winner);
+        if (winnerStanding) {
+          winnerStanding.participant.wins += 1;
+          winnerStanding.participant.matches_played += 1;
+        }
+
+        // Update statistik yang kalah
+        const loserStanding = standingsData.find(s => s.participant.id === loser);
+        if (loserStanding) {
+          loserStanding.participant.losses += 1;
+          loserStanding.participant.matches_played += 1;
+        }
+
+        // Hitung selisih skor jika ada
+        if (match.match.scores_csv) {
+          const scores = match.match.scores_csv.split(',').map(score => {
+            const [score1, score2] = score.split('-').map(Number);
+            return { score1, score2 };
+          });
+
+          if (winnerStanding && loserStanding) {
+            const totalScore1 = scores.reduce((sum, s) => sum + s.score1, 0);
+            const totalScore2 = scores.reduce((sum, s) => sum + s.score2, 0);
+            winnerStanding.participant.score_difference += Math.max(totalScore1, totalScore2);
+            loserStanding.participant.score_difference += Math.min(totalScore1, totalScore2);
+          }
+        }
+      }
+    });
+
+    // Urutkan standings berdasarkan:
+    // 1. Jumlah kemenangan (descending)
+    // 2. Selisih skor (descending)
+    // 3. Jumlah pertandingan (ascending)
+    return standingsData.sort((a, b) => {
+      if (a.participant.wins !== b.participant.wins) {
+        return b.participant.wins - a.participant.wins;
+      }
+      if (a.participant.score_difference !== b.participant.score_difference) {
+        return b.participant.score_difference - a.participant.score_difference;
+      }
+      return a.participant.matches_played - b.participant.matches_played;
+    });
+  };
+
+  // Modifikasi refreshData untuk menghitung standings
   const refreshData = async () => {
     if (!id) return;
 
@@ -68,6 +137,18 @@ export default function TournamentMatches(props) {
       }
       const challongeData = await challongeResponse.json();
 
+      // Fungsi untuk mendapatkan nama ronde
+      const getRoundName = (round) => {
+        if (round > 0) {
+          return `Ronde ${round}`;
+        } else if (round === 0) {
+          return 'Loser 0';
+        } else {
+          // Untuk ronde negatif (biasanya untuk bracket yang kalah)
+          return `Loser ${Math.abs(round)}`;
+        }
+      };
+
       // Format matches data langsung dari Challonge
       const formattedMatches = challongeData.map(matchData => ({
         match: {
@@ -76,6 +157,7 @@ export default function TournamentMatches(props) {
           tournament_id: id,
           state: matchData.match.state || 'pending',
           round: matchData.match.round,
+          round_name: getRoundName(matchData.match.round),
           player1_id: matchData.match.player1_id,
           player2_id: matchData.match.player2_id,
           winner_id: matchData.match.winner_id,
@@ -86,6 +168,47 @@ export default function TournamentMatches(props) {
       }));
       
       setMatches(formattedMatches);
+
+      // Simpan data pertandingan ke database
+      const { data: tournamentDbData, error: tournamentDbError } = await supabase
+        .from('bracket_tournaments')
+        .select('id')
+        .eq('challonge_id', id)
+        .single();
+
+      if (tournamentDbError) {
+        throw new Error("Gagal mengambil ID turnamen dari database");
+      }
+
+      // Siapkan data untuk dimasukkan ke database
+      const matchesForDb = formattedMatches.map(match => ({
+        id: match.match.id,
+        challonge_id: match.match.id,
+        tournament_id: tournamentDbData.id,
+        round: match.match.round,
+        round_name: match.match.round_name,
+        player1_id: match.match.player1_id,
+        player2_id: match.match.player2_id,
+        winner_id: match.match.winner_id,
+        loser_id: match.match.loser_id,
+        scores_csv: match.match.scores_csv,
+        state: match.match.state,
+        suggested_play_order: match.match.suggested_play_order,
+        created_at: getCurrentWIBTime(),
+        updated_at: getCurrentWIBTime()
+      }));
+
+      // Upsert data pertandingan ke database
+      const { error: matchesDbError } = await supabase
+        .from('bracket_matches')
+        .upsert(matchesForDb, {
+          onConflict: 'id',
+          ignoreDuplicates: false
+        });
+
+      if (matchesDbError) {
+        console.error("Gagal menyimpan data pertandingan ke database:", matchesDbError);
+      }
 
       // Fetch participants from database
       const { data: participantsData, error: participantsError } = await supabase
@@ -109,6 +232,11 @@ export default function TournamentMatches(props) {
       }));
       
       setParticipants(formattedParticipants);
+
+      // Hitung dan update standings
+      const calculatedStandings = calculateStandings(formattedParticipants, formattedMatches);
+      setStandings(calculatedStandings);
+
     } catch (err) {
       setError(err.message);
     }
@@ -265,11 +393,7 @@ export default function TournamentMatches(props) {
     setConfirmAction(() => async () => {
       setIsProcessing(true);
       try {
-        // Log untuk debugging
-        console.log('Attempting to reopen match:', {
-          tournamentId: id,
-          matchId: match.match.id
-        });
+       
 
         const response = await fetch(`/api/challonge/tournaments/${id}/matches/${match.match.id}/reopen`, {
           method: 'POST',
@@ -278,8 +402,6 @@ export default function TournamentMatches(props) {
           }
         });
 
-        // Log response status
-        console.log('Reopen response status:', response.status);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -287,10 +409,7 @@ export default function TournamentMatches(props) {
           throw new Error(`Gagal membuka kembali pertandingan: ${errorText}`);
         }
 
-        // Log success
-        console.log('Successfully reopened match');
-
-        // Refresh data
+     
         await refreshData();
         
         // Reset UI state
@@ -378,51 +497,22 @@ export default function TournamentMatches(props) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#1a1a1a]">
+      <AdminLayout>
+        <div className="flex items-center justify-center min-h-screen-no-nav">
       <div className="flex flex-col items-center">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#f26522] border-t-transparent mb-4"></div>
         <p className="text-white">Memuat data...</p>
       </div>
     </div>
+      </AdminLayout>
     );
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-[#1a1a1a] py-8">
-        <div className="container mx-auto px-4">
-          <div className="bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-lg">
-            {error}
-          </div>
-          <div className="mt-4">
-            <Link
-              href={`/tournament/${id}`}
-              className="inline-flex items-center text-[#f26522] hover:text-[#ff7b3d] transition-colors"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 mr-2"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              Kembali ke Detail Turnamen
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a]">
-      <TournamentHeader id={id} />
-
+    <AdminLayout>
+      <div className="min-h-screen-no-nav">
       <div className="container mx-auto px-4 py-8">
         <TournamentInfo
           tournament={tournament}
@@ -430,9 +520,9 @@ export default function TournamentMatches(props) {
           matches={matches}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Matches Section */}
-          <div className="lg:col-span-2">
+            <div className="lg:col-span-7">
             <MatchesFilter
               searchTerm={searchTerm}
               onSearchChange={setSearchTerm}
@@ -448,7 +538,7 @@ export default function TournamentMatches(props) {
                 <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className="h-6 w-6 mr-2"
+                      className="h-6 w-6 mr-2 text-[#f26522]"
                     viewBox="0 0 20 20"
                     fill="currentColor"
                   >
@@ -467,13 +557,38 @@ export default function TournamentMatches(props) {
                     statusFilter={statusFilter}
                   />
                 </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Standings Section */}
+            <div className="lg:col-span-5 flex flex-col">
+              <div className="bg-[#2b2b2b] rounded-lg shadow-xl overflow-hidden flex-1">
+                <div className="p-6 h-full flex flex-col">
+                  <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-6 w-6 mr-2 text-[#f26522]"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.616a1 1 0 01.894-1.79l1.599.8L9 4.323V3a1 1 0 011-1zm-5 8.274l-.818 2.552c.25.112.526.174.818.174.292 0 .569-.062.818-.174L5 10.274zm10 0l-.818 2.552c.25.112.526.174.818.174.292 0 .569-.062.818-.174L15 10.274z" clipRule="evenodd" />
+                    </svg>
+                    Klasemen
+                  </h2>
+
+                  <div className="overflow-x-auto flex-1">
+                    <StandingsTable
+                      standings={standings}
+                      isLoading={isLoading}
+                    />
               </div>
             </div>
           </div>
 
           {/* Update Form Section */}
-          <div className="lg:col-span-1">
             {showMatchModal && (
+                <div className="sticky top-4 mt-8">
               <UpdateMatchForm
                 selectedMatch={selectedMatch}
                 getParticipantName={getParticipantName}
@@ -486,7 +601,9 @@ export default function TournamentMatches(props) {
                 isProcessing={isProcessing}
                 onClose={handleCloseModal}
               />
+                </div>
             )}
+            </div>
           </div>
         </div>
       </div>
@@ -500,6 +617,6 @@ export default function TournamentMatches(props) {
         message={confirmMessage}
         isProcessing={isProcessing}
       />
-    </div>
+    </AdminLayout>
   );
 }

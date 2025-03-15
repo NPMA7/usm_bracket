@@ -22,7 +22,8 @@
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
-    "supabase": "^2.19.6"
+    "supabase": "^2.19.6",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

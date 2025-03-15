@@ -13,11 +13,9 @@ export async function POST(request, { params }) {
   }
 
   try {
-    console.log('Attempting to reopen match:', { tournamentId: id, matchId });
     
     const url = `https://api.challonge.com/v1/tournaments/${id}/matches/${matchId}/reopen.json?api_key=${CHALLONGE_API_KEY}`;
-    console.log('Sending request to:', url);
-
+ 
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -26,7 +24,6 @@ export async function POST(request, { params }) {
       }
     });
 
-    console.log('Response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -35,7 +32,6 @@ export async function POST(request, { params }) {
     }
 
     const data = await response.json();
-    console.log('Success response:', data);
 
     // Update match state in local database using Supabase
     const { error: supabaseError } = await supabase

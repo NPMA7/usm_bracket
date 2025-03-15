@@ -23,17 +23,27 @@ export default function TournamentList({ refreshTrigger, onTournamentSelect }) {
         if (error) {
           throw new Error('Gagal mengambil data turnamen dari database');
         }
+
+        // Ambil jumlah peserta untuk setiap turnamen
+        const tournamentsWithCounts = await Promise.all(
+          data.map(async (tournament) => {
+            const { count } = await supabase
+              .from('bracket_participants')
+              .select('*', { count: 'exact' })
+              .eq('tournament_id', tournament.challonge_id);
+            
+            return {
+              tournament: {
+                ...tournament,
+                id: tournament.challonge_id,
+                participants_count: count || 0,
+                local_data: tournament
+              }
+            };
+          })
+        );
         
-        // Format data untuk kompatibilitas dengan komponen yang ada
-        const formattedData = data.map(tournament => ({
-          tournament: {
-            ...tournament,
-            id: tournament.challonge_id,
-            local_data: tournament
-          }
-        }));
-        
-        setTournaments(formattedData);
+        setTournaments(tournamentsWithCounts);
       } catch (err) {
         setError(err.message);
         console.error('Error in TournamentList:', err);
@@ -104,6 +114,15 @@ export default function TournamentList({ refreshTrigger, onTournamentSelect }) {
                 : "Selesai"}
             </span>
           </div>
+
+          {tournament.tournament.game_name && (
+            <div className="mb-4 text-gray-400 text-sm flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M17.5 5h-15A2.5 2.5 0 000 7.5v5A2.5 2.5 0 002.5 15h15a2.5 2.5 0 002.5-2.5v-5A2.5 2.5 0 0017.5 5zM5 12.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5zm7.5-2.5a.5.5 0 11-1 0 .5.5 0 011 0zm2 2a.5.5 0 11-1 0 .5.5 0 011 0zm-1-3a.5.5 0 110-1 .5.5 0 010 1zm2 1a.5.5 0 11-1 0 .5.5 0 011 0z"/>
+              </svg>
+              {tournament.tournament.game_name}
+            </div>
+          )}
 
           {isAdmin && (
             <div className="flex flex-wrap gap-2 mb-4">
