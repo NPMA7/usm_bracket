@@ -6,7 +6,6 @@ import BracketImage from "@/components/BracketImage";
 import TournamentInfoCard from "@/components/TournamentInfoCard";
 import FinalResultBox from "@/components/FinalResultBox";
 import StandingsTable from "@/components/StandingsTable";
-import EditParticipantPositionModal from "@/components/EditParticipantPositionModal";
 import { supabase } from '@/lib/supabase';
 
 export default function TournamentDetail({ params }) {
@@ -20,13 +19,11 @@ export default function TournamentDetail({ params }) {
   const [standings, setStandings] = useState([]);
   const [isLoadingStandings, setIsLoadingStandings] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [shuffleSuccess, setShuffleSuccess] = useState(false);
   const [bracketImageKey, setBracketImageKey] = useState(0);
   const [matches, setMatches] = useState([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [user, setUser] = useState(null);
-  const [showEditPositionModal, setShowEditPositionModal] = useState(false);
 
   useEffect(() => {
     const adminUser = localStorage.getItem("adminUser");
@@ -84,20 +81,21 @@ export default function TournamentDetail({ params }) {
           throw new Error("Gagal mengambil data turnamen");
         }
 
+        // Hitung jumlah peserta dari tabel bracket_participants
+        const { count } = await supabase
+          .from('bracket_participants')
+          .select('*', { count: 'exact' })
+          .eq('tournament_id', id);
+
         // Format data untuk kompatibilitas dengan komponen yang ada
         const formattedTournament = {
-          name: tournamentData.name,
-          state: tournamentData.state,
-          participants_count: tournamentData.participants_count || 0,
-          created_at: tournamentData.created_at,
-          tournament_type: tournamentData.tournament_type,
-          game_name: tournamentData.game_name,
-          full_challonge_url: tournamentData.full_challonge_url
+          ...tournamentData,
+          participants_count: count || 0
         };
 
         setTournament(formattedTournament);
         setTournamentStarted(tournamentData.state !== "pending");
-        setParticipantsCount(tournamentData.participants_count || 0);
+        setParticipantsCount(count || 0);
 
         // Fetch standings data
         await fetchStandings(id);
@@ -265,133 +263,14 @@ export default function TournamentDetail({ params }) {
     setTournamentStarted(true);
   };
 
-  const handleStartTournament = async () => {
-    if (!id || isProcessing) return;
-
-    setIsProcessing(true);
-    try {
-      // Update status turnamen di database
-      const { error: updateError } = await supabase
-        .from('bracket_tournaments')
-        .update({
-          state: 'underway',
-          started_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('challonge_id', id);
-
-      if (updateError) {
-        throw new Error("Gagal memulai turnamen");
-      }
-
-      setTournamentStarted(true);
-      // Refresh data
-      window.location.reload();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleFinalizeTournament = async () => {
-    if (!id || isProcessing) return;
-
-    if (
-      !confirm(
-        "Apakah Anda yakin ingin menyelesaikan turnamen ini? Aksi ini tidak dapat dibatalkan."
-      )
-    ) {
-      return;
-    }
-
-    setIsProcessing(true);
-    try {
-      // Update status turnamen di database
-      const { error: updateError } = await supabase
-        .from('bracket_tournaments')
-        .update({
-          state: 'complete',
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('challonge_id', id);
-
-      if (updateError) {
-        throw new Error("Gagal menyelesaikan turnamen");
-      }
-
-      // Refresh data
-      window.location.reload();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  /**
-   * Fungsi untuk mengacak urutan peserta turnamen
-   * Hanya me-refresh data bracket dan standings, bukan seluruh halaman
-   */
-  const handleShuffleTournament = async () => {
-    if (!id || isProcessing) return;
-
-    if (
-      !confirm(
-        "Apakah Anda yakin ingin mengacak urutan peserta? Ini akan mengubah bracket turnamen."
-      )
-    ) {
-      return;
-    }
-
-    setIsProcessing(true);
-    try {
-      const response = await fetch(`/api/challonge/tournaments/${id}/shuffle`, {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        throw new Error("Gagal mengacak peserta turnamen");
-      }
-
-      setShuffleSuccess(true);
-
-      // Hilangkan notifikasi sukses setelah 3 detik
-      setTimeout(() => {
-        setShuffleSuccess(false);
-      }, 3000);
-
-      // Refresh bracket dengan mengubah key
-      setBracketImageKey((prevKey) => prevKey + 1);
-
-      // Refresh standings data
-      await fetchStandings(id);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  /**
-   * Fungsi untuk menangani sukses edit posisi peserta
-   * Refresh bracket dan standings data
-   */
-  const handleEditPositionSuccess = () => {
-    // Refresh bracket dengan mengubah key
-    setBracketImageKey((prevKey) => prevKey + 1);
-
-    // Refresh standings data
-    fetchStandings(id);
-  };
-
+ 
   /**
    * Fungsi untuk memeriksa status turnamen tanpa menampilkan loading
    * @param {string} tournamentId - ID turnamen
    */
   const checkTournamentStatus = async (tournamentId) => {
     try {
+      // Fetch tournament details from database
       const { data: tournamentData, error: tournamentError } = await supabase
         .from('bracket_tournaments')
         .select('*')
@@ -402,24 +281,28 @@ export default function TournamentDetail({ params }) {
         throw new Error("Gagal memeriksa status turnamen");
       }
 
+      // Hitung jumlah peserta dari tabel bracket_participants
+      const { count } = await supabase
+        .from('bracket_participants')
+        .select('*', { count: 'exact' })
+        .eq('tournament_id', tournamentId);
+
       // Format data untuk kompatibilitas dengan komponen yang ada
       const formattedTournament = {
-        name: tournamentData.name,
-        state: tournamentData.state,
-        participants_count: tournamentData.participants_count || 0,
+        ...tournamentData,
+        participants_count: count || 0,
         created_at: tournamentData.created_at,
-        tournament_type: tournamentData.tournament_type,
-        game_name: tournamentData.game_name,
-        full_challonge_url: tournamentData.full_challonge_url
+        updated_at: new Date().toISOString()
       };
 
       setTournament(formattedTournament);
       setTournamentStarted(tournamentData.state !== "pending");
+      setParticipantsCount(count || 0);
 
       // Jika turnamen baru saja selesai, refresh standings tanpa loading
       if (
         tournamentData.state === "complete" &&
-        tournament?.tournament?.state !== "complete"
+        tournament?.state !== "complete"
       ) {
         await fetchStandingsQuiet(tournamentId);
       }
@@ -443,14 +326,7 @@ export default function TournamentDetail({ params }) {
 
   return (
     <div className="min-h-screen bg-[#1a1a1a]">
-      <EditParticipantPositionModal
-        isOpen={showEditPositionModal}
-        onClose={() => setShowEditPositionModal(false)}
-        tournamentId={id}
-        onSuccess={handleEditPositionSuccess}
-      />
-      
-      <div className="bg-[#2b2b2b] border-b border-gray-700">
+       <div className="bg-[#2b2b2b] border-b border-gray-700">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <Link
             href={`/  `}
@@ -502,6 +378,7 @@ export default function TournamentDetail({ params }) {
             id={id}
             onTournamentStarted={handleTournamentStarted}
             isAdmin={user && ['admin', 'owner'].includes(user.role)}
+            showControls={false}
           />
         )}
 
@@ -511,13 +388,11 @@ export default function TournamentDetail({ params }) {
 
         {/* Tournament Details */}
         <div
-          className={`grid grid-cols-1 ${
-            isAdmin ? "md:grid-cols-2" : ""
-          } gap-8`}
+          className={`grid grid-cols-1 gap-8`}
         >
           {/* Info Section */}
           <div className="bg-[#2b2b2b] rounded-lg shadow-xl">
-            <div className="p-6">
+            <div className="p-6  gap-8">
               <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -533,10 +408,9 @@ export default function TournamentDetail({ params }) {
                 </svg>
                 Informasi Turnamen
               </h2>
-
-              <div className="space-y-4">
+                <div className="space-y-4 grid grid-cols-2 gap-8">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                  <label className="block text-sm font-mum text-gray-400 mb-1">
                     Tipe Turnamen
                   </label>
                   <p className="text-white">
@@ -581,79 +455,6 @@ export default function TournamentDetail({ params }) {
               </div>
             </div>
           </div>
-
-          {/* Actions Section - Only show for admin/owner */}
-          {isAdmin && (
-            <div className="bg-[#2b2b2b] rounded-lg shadow-xl">
-              <div className="p-6">
-                <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-6 w-6 mr-2"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  Kelola Turnamen
-                </h2>
-
-                {!tournamentStarted && participantsCount < 2 && (
-                  <div className="bg-yellow-900/50 border border-yellow-500 text-yellow-300 px-4 py-3 rounded-lg mb-6">
-                    <p className="font-bold">Turnamen belum dapat dimulai</p>
-                    <p>
-                      Turnamen membutuhkan minimal 2 peserta untuk dapat
-                      dimulai.
-                    </p>
-                  </div>
-                )}
-
-                <div className="space-y-4">
-                  <Link
-                    href={`/tournament/${id}/participants`}
-                    className="block w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-center"
-                  >
-                    Kelola Peserta
-                  </Link>
-                  <Link
-                    href={`/tournament/${id}/matches`}
-                    className="block w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-center"
-                  >
-                    Kelola Pertandingan
-                  </Link>
-
-                  {/* Tombol Edit Posisi dan Shuffle hanya muncul jika turnamen belum dimulai */}
-                  {!tournamentStarted && (
-                    <>
-                      <button
-                        onClick={() => setShowEditPositionModal(true)}
-                        className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg"
-                        disabled={isProcessing}
-                      >
-                        Edit Posisi Tim
-                      </button>
-                      <button
-                        onClick={handleShuffleTournament}
-                        className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg"
-                        disabled={isProcessing}
-                      >
-                        {isProcessing ? "Sedang Mengacak..." : "Shuffle Tim"}
-                      </button>
-                      {shuffleSuccess && (
-                        <div className="mt-2 text-green-400 text-sm text-center">
-                          Berhasil mengacak urutan peserta!
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="mt-8">
@@ -677,11 +478,23 @@ export default function TournamentDetail({ params }) {
                     </svg>
                     Bracket Turnamen
                   </h2>
-                  <BracketImage
-                    tournamentId={id}
-                    refreshKey={bracketImageKey}
-                    isAdmin={isAdmin}
-                  />
+                  {!tournamentStarted ? (
+                    <div className="bg-[#2b2b2b] p-6 rounded-lg border border-gray-700">
+                      <div className="flex items-center mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        <h3 className="text-lg font-semibold text-yellow-500">Turnamen Belum Dimulai</h3>
+                      </div>
+                      <p className="text-gray-400 mb-2">Bracket turnamen akan ditampilkan setelah turnamen dimulai.</p>
+                    </div>
+                  ) : (
+                    <BracketImage
+                      tournamentId={id}
+                      refreshKey={bracketImageKey}
+                      isAdmin={isAdmin}
+                    />
+                  )}
                 </div>
 
                 {/* Standings Column */}
@@ -695,11 +508,11 @@ export default function TournamentDetail({ params }) {
                     >
                       <path
                         fillRule="evenodd"
-                        d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
                         clipRule="evenodd"
                       />
                     </svg>
-                    Standings
+                    Klasemen
                     {lastRefreshed && (
                       <span className="ml-2 text-xs text-gray-400">
                         (Diperbarui {lastRefreshed.toLocaleTimeString("id-ID")})

@@ -7,8 +7,8 @@ const BASE_URL = process.env.CHALLONGE_API_URL;
 
 export async function POST(request, { params }) {
   try {
-    const { id } = params;
-    
+    // Pastikan params.id tersedia
+    const id = params?.id;
     if (!id) {
       return NextResponse.json(
         { error: 'ID turnamen diperlukan' },
@@ -16,10 +16,7 @@ export async function POST(request, { params }) {
       );
     }
 
-    // Mendapatkan API key dari environment variable
-    const apiKey = process.env.CHALLONGE_API_KEY;
-    
-    if (!apiKey) {
+    if (!API_KEY) {
       return NextResponse.json(
         { error: 'API key tidak ditemukan' },
         { status: 500 }
@@ -29,26 +26,31 @@ export async function POST(request, { params }) {
     // Melakukan shuffle peserta turnamen di Challonge
     const response = await axios.post(
       `${BASE_URL}/tournaments/${id}/participants/randomize.json`,
-      {},
       {
-        params: {
-          api_key: apiKey,
-        },
+        api_key: API_KEY
       }
     );
+
+    if (!response.data) {
+      throw new Error('Tidak ada respons dari Challonge saat mengacak peserta');
+    }
 
     // Ambil data peserta terbaru dari Challonge setelah shuffle
     const participantsResponse = await axios.get(
       `${BASE_URL}/tournaments/${id}/participants.json`,
       {
         params: {
-          api_key: apiKey,
-        },
+          api_key: API_KEY
+        }
       }
     );
 
+    if (!participantsResponse.data) {
+      throw new Error('Tidak ada data peserta setelah pengacakan');
+    }
+
     // Update seed peserta di database
-    for (const participant of participantsResponse.data) {
+    const updatePromises = participantsResponse.data.map(async (participant) => {
       const { error: updateError } = await supabase
         .from('bracket_participants')
         .update({
@@ -60,11 +62,17 @@ export async function POST(request, { params }) {
 
       if (updateError) {
         console.error('Error updating participant seed:', updateError);
+        throw new Error(`Gagal memperbarui seed untuk peserta ${participant.participant.name}`);
       }
-    }
+    });
+
+    await Promise.all(updatePromises);
 
     return NextResponse.json(
-      { message: 'Peserta berhasil diacak', data: response.data },
+      { 
+        message: 'Peserta berhasil diacak',
+        data: response.data 
+      },
       { status: 200 }
     );
   } catch (error) {

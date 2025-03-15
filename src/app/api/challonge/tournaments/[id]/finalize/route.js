@@ -1,91 +1,84 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { supabase } from '@/lib/supabase';
+import { getCurrentWIBTime } from '@/lib/utils';
 
 const API_KEY = process.env.CHALLONGE_API_KEY;
-const BASE_URL = process.env.CHALLONGE_API_URL;
+const BASE_URL = 'https://api.challonge.com/v1';
 
 export async function POST(request, { params }) {
   try {
-    const { id } = params;
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'Tournament ID is required' },
-        { status: 400 }
-      );
+    if (!params?.id) {
+      return NextResponse.json({ error: 'Tournament ID is required' }, { status: 400 });
     }
 
-    // Finalisasi turnamen di Challonge
-    const challongeResponse = await axios.post(
-      `${BASE_URL}/tournaments/${id}/finalize.json`,
+    if (!API_KEY) {
+      return NextResponse.json({ error: 'API key is not configured' }, { status: 500 });
+    }
+
+    // Menyelesaikan turnamen di Challonge
+    const finalizeResponse = await axios.post(
+      `${BASE_URL}/tournaments/${params.id}/finalize.json`,
+      {},
       {
-        api_key: API_KEY,
+        params: {
+          api_key: API_KEY,
+        },
       }
     );
 
-    const tournamentData = challongeResponse.data.tournament;
+    if (!finalizeResponse.data) {
+      throw new Error('Failed to finalize tournament');
+    }
 
     // Update status turnamen di database
-    const { data: supabaseData, error: supabaseError } = await supabase
+    const { error: updateError } = await supabase
       .from('bracket_tournaments')
       .update({
         state: 'complete',
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        completed_at: getCurrentWIBTime(),
+        updated_at: getCurrentWIBTime()
       })
-      .eq('challonge_id', id)
-      .select();
+      .eq('challonge_id', params.id);
 
-    if (supabaseError) {
-      console.error('Error updating tournament status in database:', supabaseError);
-      return NextResponse.json(challongeResponse.data);
+    if (updateError) {
+      console.error('Error updating tournament state:', updateError);
+      throw new Error('Failed to update tournament state in database');
     }
 
-    // Update final_rank peserta di database
-    try {
-      const participantsResponse = await axios.get(
-        `${BASE_URL}/tournaments/${id}/participants.json`,
-        {
-          params: {
-            api_key: API_KEY,
-          },
-        }
-      );
+    // Mengambil dan menyimpan hasil akhir peserta
+    const participantsResponse = await axios.get(
+      `${BASE_URL}/tournaments/${params.id}/participants.json`,
+      {
+        params: {
+          api_key: API_KEY,
+        },
+      }
+    );
 
-      const participants = participantsResponse.data;
+    if (participantsResponse.data) {
+      for (const participant of participantsResponse.data) {
+        const { error: participantError } = await supabase
+          .from('bracket_participants')
+          .update({
+            final_rank: participant.participant.final_rank,
+            updated_at: getCurrentWIBTime()
+          })
+          .eq('challonge_id', participant.participant.id)
+          .eq('tournament_id', params.id);
 
-      // Update final_rank setiap peserta
-      for (const participant of participants) {
-        const participantData = participant.participant;
-        
-        if (participantData.final_rank) {
-          await supabase
-            .from('bracket_participants')
-            .update({
-              final_rank: participantData.final_rank,
-              updated_at: new Date().toISOString()
-            })
-            .eq('challonge_id', participantData.id)
-            .eq('tournament_id', id);
+        if (participantError) {
+          console.error('Error updating participant final rank:', participantError);
         }
       }
-    } catch (participantError) {
-      console.error('Error updating participants final rank:', participantError);
-      // Tidak menghentikan proses karena turnamen sudah difinalisasi
     }
 
-    return NextResponse.json({
-      tournament: {
-        ...tournamentData,
-        local_data: supabaseData[0]
-      }
-    });
+    return NextResponse.json({ message: 'Tournament finalized successfully' });
   } catch (error) {
-    console.error('Error finalizing tournament:', error.response?.data || error.message);
+    console.error('Error finalizing tournament:', error);
     return NextResponse.json(
-      { error: 'Failed to finalize tournament' },
-      { status: error.response?.status || 500 }
+      { error: error.message || 'Failed to finalize tournament' },
+      { status: 500 }
     );
   }
 } 

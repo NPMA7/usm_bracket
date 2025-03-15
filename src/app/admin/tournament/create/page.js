@@ -3,11 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import CreateTournamentForm from "@/components/CreateTournamentForm";
-import TournamentList from "@/components/TournamentList";
 import AdminLayout from "@/components/admin/AdminLayout";
 import EditTournamentModal from "@/components/EditTournamentModal";
 
-export default function TournamentOptions() {
+export default function TournamentCreate() {
   const router = useRouter();
   const [tournaments, setTournaments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);

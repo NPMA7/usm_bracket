@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { supabase } from '@/lib/supabase';
+import { getCurrentWIBTime } from '@/lib/utils';
 
 const API_KEY = process.env.CHALLONGE_API_KEY;
 const BASE_URL = process.env.CHALLONGE_API_URL;
@@ -80,8 +81,8 @@ export async function POST(request) {
                   name: participantData.name,
                   seed: nextSeed,
                   final_rank: participantData.final_rank,
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
+                  created_at: getCurrentWIBTime(),
+                  updated_at: getCurrentWIBTime()
                 }
               ]);
 
@@ -156,8 +157,8 @@ export async function POST(request) {
               name: participantData.name,
               seed: seed || nextSeed,
               final_rank: participantData.final_rank,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              created_at: getCurrentWIBTime(),
+              updated_at: getCurrentWIBTime()
             }
           ])
           .select();
@@ -270,7 +271,7 @@ async function syncParticipantsWithChallonge(tournamentId, localParticipants) {
             name: participant.name,
             seed: participant.seed,
             final_rank: participant.final_rank,
-            updated_at: new Date().toISOString()
+            updated_at: getCurrentWIBTime()
           })
           .eq('challonge_id', participant.id)
           .eq('tournament_id', tournamentId);
@@ -312,40 +313,47 @@ async function syncParticipantsWithChallonge(tournamentId, localParticipants) {
 // Fungsi untuk mengubah data peserta
 export async function PUT(request) {
   try {
-    const body = await request.json();
-    const { tournamentId, participantId, name, email, seed } = body;
-
-
-    if (!tournamentId || !participantId) {
-      return NextResponse.json(
-        { error: 'Tournament ID dan Participant ID diperlukan' },
-        { status: 400 }
-      );
+    if (!API_KEY) {
+      return NextResponse.json({ error: "API key tidak dikonfigurasi" }, { status: 500 });
     }
 
-    // Buat objek participant dengan field yang akan diupdate
-    const participant = {};
-    if (name !== undefined) participant.name = name;
-    if (email !== undefined) participant.email = email;
-    if (seed !== undefined) participant.seed = seed;
+    const { tournamentId, participantId, seed } = await request.json();
 
+    if (!tournamentId || !participantId) {
+      return NextResponse.json({ error: "Tournament ID dan Participant ID diperlukan" }, { status: 400 });
+    }
 
-    const response = await axios.put(
+    // Update di Challonge
+    const challongeResponse = await axios.put(
       `${BASE_URL}/tournaments/${tournamentId}/participants/${participantId}.json`,
       {
         api_key: API_KEY,
-        participant
+        participant: {
+          seed: seed
+        }
       }
     );
 
+    if (challongeResponse.status !== 200) {
+      throw new Error('Gagal memperbarui posisi peserta di Challonge');
+    }
 
-    return NextResponse.json(response.data);
+    // Update di database lokal
+    const { error: dbError } = await supabase
+      .from('bracket_participants')
+      .update({ seed: seed })
+      .eq('tournament_id', tournamentId)
+      .eq('challonge_id', participantId);
+
+    if (dbError) {
+      throw new Error('Gagal memperbarui posisi peserta di database lokal');
+    }
+
+    return NextResponse.json({ message: "Berhasil memperbarui posisi peserta" });
   } catch (error) {
-    console.error('Error updating participant:', error);
-    console.error('Error details:', error.response?.data || error.message);
-    
+    console.error('Error updating participant position:', error);
     return NextResponse.json(
-      { error: 'Gagal mengupdate data peserta: ' + (error.response?.data?.errors?.join(', ') || error.message) },
+      { error: error.message || "Gagal memperbarui posisi peserta" },
       { status: error.response?.status || 500 }
     );
   }

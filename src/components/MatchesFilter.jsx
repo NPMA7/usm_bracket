@@ -58,9 +58,9 @@ const MatchesFilter = ({
               className="w-full bg-[#3b3b3b] text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f26522]"
             >
               <option value="all">Semua Status</option>
-              <option value="pending">Menunggu</option>
-              <option value="open">Sedang Berlangsung</option>
+              <option value="open">Berlangsung</option>
               <option value="complete">Selesai</option>
+              <option value="pending">Menunggu</option>
             </select>
           </div>
         </div>

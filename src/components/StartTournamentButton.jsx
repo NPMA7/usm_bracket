@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentWIBTime } from '@/lib/utils';
 
 export default function StartTournamentButton({ tournamentId, onTournamentStarted, disabled }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -16,26 +17,42 @@ export default function StartTournamentButton({ tournamentId, onTournamentStarte
     setSuccess(false);
     
     try {
+      // Mulai turnamen di Challonge terlebih dahulu
+      const response = await fetch(`/api/challonge/tournaments/${tournamentId}/start`, {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        throw new Error('Gagal memulai turnamen di Challonge');
+      }
+
+      const data = await response.json();
+
+      // Dapatkan jumlah peserta saat ini
+      const { count } = await supabase
+        .from('bracket_participants')
+        .select('*', { count: 'exact' })
+        .eq('tournament_id', tournamentId);
+
       // Update status turnamen di database menggunakan Supabase
-      const { data, error } = await supabase
+      const { error: updateError } = await supabase
         .from('bracket_tournaments')
         .update({
           state: 'underway',
-          started_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          started_at: getCurrentWIBTime(),
+          updated_at: getCurrentWIBTime(),
+          participants_count: count || 0
         })
-        .eq('challonge_id', tournamentId)
-        .select()
-        .single();
+        .eq('challonge_id', tournamentId);
       
-      if (error) {
-        throw new Error(error.message || 'Gagal memulai turnamen');
+      if (updateError) {
+        throw new Error(updateError.message || 'Gagal memulai turnamen');
       }
       
       setSuccess(true);
       
       if (onTournamentStarted) {
-        onTournamentStarted(data);
+        onTournamentStarted(data.tournament);
       }
       
       // Reload halaman setelah 2 detik

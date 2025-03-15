@@ -9,6 +9,7 @@ import UpdateMatchForm from "@/components/UpdateMatchForm";
 import TournamentInfo from "@/components/TournamentInfo";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getCurrentWIBTime } from '@/lib/utils';
 
 export default function TournamentMatches(props) {
   const router = useRouter();
@@ -25,6 +26,93 @@ export default function TournamentMatches(props) {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [user, setUser] = useState(null);
+  const [showMatchModal, setShowMatchModal] = useState(false);
+
+  // Tambahkan state untuk modal konfirmasi
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [confirmMessage, setConfirmMessage] = useState("");
+  const [confirmTitle, setConfirmTitle] = useState("");
+
+  // Fungsi untuk memperbarui data
+  const refreshData = async () => {
+    if (!id) return;
+
+    try {
+      // Fetch tournament details from database
+      const { data: tournamentData, error: tournamentError } = await supabase
+        .from('bracket_tournaments')
+        .select('*')
+        .eq('challonge_id', id)
+        .single();
+      
+      if (tournamentError) {
+        throw new Error("Gagal mengambil data turnamen dari database");
+      }
+
+      // Format tournament data
+      const formattedTournament = {
+        tournament: {
+          ...tournamentData,
+          id: tournamentData.challonge_id,
+          local_data: tournamentData
+        }
+      };
+      
+      setTournament(formattedTournament);
+
+      // Ambil data langsung dari API Challonge
+      const challongeResponse = await fetch(`/api/challonge/tournaments/${id}/matches`);
+      if (!challongeResponse.ok) {
+        throw new Error("Gagal mengambil data dari API Challonge");
+      }
+      const challongeData = await challongeResponse.json();
+
+      // Format matches data langsung dari Challonge
+      const formattedMatches = challongeData.map(matchData => ({
+        match: {
+          ...matchData.match,
+          id: matchData.match.id,
+          tournament_id: id,
+          state: matchData.match.state || 'pending',
+          round: matchData.match.round,
+          player1_id: matchData.match.player1_id,
+          player2_id: matchData.match.player2_id,
+          winner_id: matchData.match.winner_id,
+          loser_id: matchData.match.loser_id,
+          scores_csv: matchData.match.scores_csv,
+          suggested_play_order: matchData.match.suggested_play_order
+        }
+      }));
+      
+      setMatches(formattedMatches);
+
+      // Fetch participants from database
+      const { data: participantsData, error: participantsError } = await supabase
+        .from('bracket_participants')
+        .select('*')
+        .eq('tournament_id', id)
+        .order('seed', { nullsLast: true });
+      
+      if (participantsError) {
+        throw new Error("Gagal mengambil data peserta dari database");
+      }
+      
+      // Format participants data
+      const formattedParticipants = participantsData.map(participant => ({
+        participant: {
+          ...participant,
+          id: participant.challonge_id,
+          tournament_id: participant.tournament_id,
+          local_data: participant
+        }
+      }));
+      
+      setParticipants(formattedParticipants);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   useEffect(() => {
     // Cek apakah user adalah admin
@@ -41,86 +129,18 @@ export default function TournamentMatches(props) {
   }, [id, router]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!id) return;
-
+    const fetchInitialData = async () => {
       setIsLoading(true);
-      try {
-        // Fetch tournament details from database
-        const { data: tournamentData, error: tournamentError } = await supabase
-          .from('bracket_tournaments')
-          .select('*')
-          .eq('challonge_id', id)
-          .single();
-        
-        if (tournamentError) {
-          throw new Error("Gagal mengambil data turnamen dari database");
-        }
-        
-        // Format data untuk kompatibilitas dengan komponen yang ada
-        const formattedTournament = {
-          tournament: {
-            ...tournamentData,
-            id: tournamentData.challonge_id,
-            local_data: tournamentData
-          }
-        };
-        
-        setTournament(formattedTournament);
-
-        // Fetch matches from database
-        const { data: matchesData, error: matchesError } = await supabase
-          .from('bracket_matches')
-          .select('*')
-          .eq('tournament_id', id)
-          .order('suggested_play_order', { nullsLast: true });
-        
-        if (matchesError) {
-          throw new Error("Gagal mengambil data pertandingan dari database");
-        }
-        
-        // Format data untuk kompatibilitas dengan komponen yang ada
-        const formattedMatches = matchesData.map(match => ({
-          match: {
-            ...match,
-            id: match.challonge_id,
-            tournament_id: match.tournament_id,
-            local_data: match
-          }
-        }));
-        
-        setMatches(formattedMatches);
-
-        // Fetch participants from database
-        const { data: participantsData, error: participantsError } = await supabase
-          .from('bracket_participants')
-          .select('*')
-          .eq('tournament_id', id)
-          .order('seed', { nullsLast: true });
-        
-        if (participantsError) {
-          throw new Error("Gagal mengambil data peserta dari database");
-        }
-        
-        // Format data untuk kompatibilitas dengan komponen yang ada
-        const formattedParticipants = participantsData.map(participant => ({
-          participant: {
-            ...participant,
-            id: participant.challonge_id,
-            tournament_id: participant.tournament_id,
-            local_data: participant
-          }
-        }));
-        
-        setParticipants(formattedParticipants);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
+      await refreshData();
+      setIsLoading(false);
     };
 
-    fetchData();
+    fetchInitialData();
+
+    // Set interval untuk memperbarui data setiap 5 detik
+    const interval = setInterval(refreshData, 5000);
+
+    return () => clearInterval(interval);
   }, [id]);
 
   const getParticipantName = (id) => {
@@ -154,6 +174,13 @@ export default function TournamentMatches(props) {
       // Reset scores jika tidak ada scores_csv
       setScores([{ player1: 0, player2: 0 }]);
     }
+    setShowMatchModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowMatchModal(false);
+    setSelectedMatch(null);
+    setScores([{ player1: 0, player2: 0 }]);
   };
 
   const handleSetChange = (index, player, value) => {
@@ -197,49 +224,31 @@ export default function TournamentMatches(props) {
         winnerId = selectedMatch.match.player2_id;
       }
 
-      // Update pertandingan di database
-      const { data, error } = await supabase
-        .from('bracket_matches')
-        .update({
-          winner_id: winnerId,
-          scores_csv: scoresString,
-          state: winnerId ? 'complete' : 'open',
-          updated_at: new Date().toISOString()
-        })
-        .eq('challonge_id', selectedMatch.match.id)
-        .eq('tournament_id', id)
-        .select();
+      // Update match di Challonge API
+      const response = await fetch(`/api/challonge/tournaments/${id}/matches/${selectedMatch.match.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          match: {
+            winner_id: winnerId,
+            scores_csv: scoresString,
+          },
+        }),
+      });
 
-      if (error) {
-        throw new Error("Gagal mengupdate pertandingan di database");
+      if (!response.ok) {
+        throw new Error('Gagal mengupdate pertandingan di Challonge');
       }
 
-      // Refresh matches data
-      const { data: matchesData, error: matchesError } = await supabase
-        .from('bracket_matches')
-        .select('*')
-        .eq('tournament_id', id)
-        .order('suggested_play_order', { nullsLast: true });
-      
-      if (matchesError) {
-        throw new Error("Gagal mengambil data pertandingan dari database");
-      }
-      
-      // Format data untuk kompatibilitas dengan komponen yang ada
-      const formattedMatches = matchesData.map(match => ({
-        match: {
-          ...match,
-          id: match.challonge_id,
-          tournament_id: match.tournament_id,
-          local_data: match
-        }
-      }));
-      
-      setMatches(formattedMatches);
+      // Refresh data setelah update
+      await refreshData();
 
-      // Reset selection
+      // Reset selection dan tutup modal
       setSelectedMatch(null);
       setScores([{ player1: 0, player2: 0 }]);
+      setShowMatchModal(false);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -250,78 +259,68 @@ export default function TournamentMatches(props) {
   const handleReopenMatch = async (match) => {
     if (!match || isProcessing) return;
 
-    setIsProcessing(true);
-    try {
-      // Update pertandingan di database
-      const { data, error } = await supabase
-        .from('bracket_matches')
-        .update({
-          winner_id: null,
-          scores_csv: '',
-          state: 'open',
-          updated_at: new Date().toISOString()
-        })
-        .eq('challonge_id', match.match.id)
-        .eq('tournament_id', id)
-        .select();
+    setShowMatchModal(false); // Tutup modal form terlebih dahulu
+    setConfirmTitle("Buka Kembali Pertandingan");
+    setConfirmMessage("Apakah Anda yakin ingin membuka kembali pertandingan ini? Skor sebelumnya akan dihapus.");
+    setConfirmAction(() => async () => {
+      setIsProcessing(true);
+      try {
+        // Log untuk debugging
+        console.log('Attempting to reopen match:', {
+          tournamentId: id,
+          matchId: match.match.id
+        });
 
-      if (error) {
-        throw new Error("Gagal membuka kembali pertandingan di database");
-      }
+        const response = await fetch(`/api/challonge/tournaments/${id}/matches/${match.match.id}/reopen`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
 
-      // Refresh matches data
-      const { data: matchesData, error: matchesError } = await supabase
-        .from('bracket_matches')
-        .select('*')
-        .eq('tournament_id', id)
-        .order('suggested_play_order', { nullsLast: true });
-      
-      if (matchesError) {
-        throw new Error("Gagal mengambil data pertandingan dari database");
-      }
-      
-      // Format data untuk kompatibilitas dengan komponen yang ada
-      const formattedMatches = matchesData.map(match => ({
-        match: {
-          ...match,
-          id: match.challonge_id,
-          tournament_id: match.tournament_id,
-          local_data: match
+        // Log response status
+        console.log('Reopen response status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Error reopening match:', errorText);
+          throw new Error(`Gagal membuka kembali pertandingan: ${errorText}`);
         }
-      }));
-      
-      setMatches(formattedMatches);
 
-      // Reset selection
-      setSelectedMatch(null);
-      setScores([{ player1: 0, player2: 0 }]);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsProcessing(false);
-    }
+        // Log success
+        console.log('Successfully reopened match');
+
+        // Refresh data
+        await refreshData();
+        
+        // Reset UI state
+        setSelectedMatch(null);
+        setScores([{ player1: 0, player2: 0 }]);
+        setShowConfirmModal(false);
+      } catch (err) {
+        console.error('Error in handleReopenMatch:', err);
+        setError(err.message);
+      } finally {
+        setIsProcessing(false);
+      }
+    });
+    setShowConfirmModal(true);
   };
 
   const handleFinalizeTournament = async () => {
     if (!id || isProcessing) return;
 
-    if (
-      !confirm(
-        "Apakah Anda yakin ingin menyelesaikan turnamen ini? Aksi ini tidak dapat dibatalkan."
-      )
-    ) {
-      return;
-    }
-
+    setConfirmTitle("Selesaikan Turnamen");
+    setConfirmMessage("Apakah Anda yakin ingin menyelesaikan turnamen ini? Aksi ini tidak dapat dibatalkan.");
+    setConfirmAction(() => async () => {
     setIsProcessing(true);
     try {
-      // Update status turnamen di database
       const { data, error } = await supabase
         .from('bracket_tournaments')
         .update({
           state: 'complete',
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+            completed_at: getCurrentWIBTime(),
+            updated_at: getCurrentWIBTime()
         })
         .eq('challonge_id', id)
         .select();
@@ -330,13 +329,51 @@ export default function TournamentMatches(props) {
         throw new Error("Gagal menyelesaikan turnamen di database");
       }
 
-      // Redirect ke halaman detail turnamen
       window.location.href = `/tournament/${id}`;
     } catch (err) {
       setError(err.message);
     } finally {
       setIsProcessing(false);
     }
+    });
+    setShowConfirmModal(true);
+  };
+
+  // Tambahkan komponen ConfirmationModal
+  const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, isProcessing }) => {
+    if (!isOpen) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-[#2b2b2b] rounded-lg p-6 max-w-md w-full mx-4">
+          <h3 className="text-xl font-semibold text-white mb-4">{title}</h3>
+          <p className="text-gray-300 mb-6">{message}</p>
+          <div className="flex justify-end space-x-4">
+            <button
+              onClick={onClose}
+              disabled={isProcessing}
+              className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+            >
+              Batal
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isProcessing}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center"
+            >
+              {isProcessing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                  Memproses...
+                </>
+              ) : (
+                'Konfirmasi'
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -436,20 +473,33 @@ export default function TournamentMatches(props) {
 
           {/* Update Form Section */}
           <div className="lg:col-span-1">
-            <UpdateMatchForm
-              selectedMatch={selectedMatch}
-              getParticipantName={getParticipantName}
-              scores={scores}
-              onSetChange={handleSetChange}
-              onAddSet={handleAddSet}
-              onRemoveSet={handleRemoveSet}
-              onUpdateMatch={handleUpdateMatch}
-              onReopenMatch={handleReopenMatch}
-              isProcessing={isProcessing}
-            />
+            {showMatchModal && (
+              <UpdateMatchForm
+                selectedMatch={selectedMatch}
+                getParticipantName={getParticipantName}
+                scores={scores}
+                onSetChange={handleSetChange}
+                onAddSet={handleAddSet}
+                onRemoveSet={handleRemoveSet}
+                onUpdateMatch={handleUpdateMatch}
+                onReopenMatch={handleReopenMatch}
+                isProcessing={isProcessing}
+                onClose={handleCloseModal}
+              />
+            )}
           </div>
         </div>
       </div>
+
+      {/* Tambahkan Modal Konfirmasi */}
+      <ConfirmationModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={confirmAction}
+        title={confirmTitle}
+        message={confirmMessage}
+        isProcessing={isProcessing}
+      />
     </div>
   );
 }

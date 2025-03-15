@@ -1,100 +1,77 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { supabase } from '@/lib/supabase';
+import { getCurrentWIBTime } from '@/lib/utils';
 
 const API_KEY = process.env.CHALLONGE_API_KEY;
-const BASE_URL = process.env.CHALLONGE_API_URL;
+const BASE_URL = 'https://api.challonge.com/v1';
 
 export async function POST(request, { params }) {
   try {
-    const { id } = params;
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'Tournament ID is required' },
-        { status: 400 }
-      );
+    const tournamentId = params?.id;
+    if (!tournamentId) {
+      return NextResponse.json({ error: 'Tournament ID is required' }, { status: 400 });
     }
 
-    // Update status turnamen di Challonge
-    const challongeResponse = await axios.post(
-      `${BASE_URL}/tournaments/${id}/start.json`,
+    if (!API_KEY) {
+      return NextResponse.json({ error: 'API key is not configured' }, { status: 500 });
+    }
+
+    // Memulai turnamen di Challonge
+    const startResponse = await axios.post(
+      `${BASE_URL}/tournaments/${tournamentId}/start.json`,
+      {},
       {
-        api_key: API_KEY,
+        params: {
+          api_key: API_KEY,
+        },
       }
     );
 
-    const tournamentData = challongeResponse.data.tournament;
+    if (!startResponse.data) {
+      throw new Error('Failed to start tournament');
+    }
 
-    // Update status turnamen di database
-    const { data: supabaseData, error: supabaseError } = await supabase
+    // Ambil data turnamen terbaru dari Challonge untuk mendapatkan started_at
+    const tournamentResponse = await axios.get(
+      `${BASE_URL}/tournaments/${tournamentId}.json`,
+      {
+        params: {
+          api_key: API_KEY,
+        },
+      }
+    );
+
+    if (!tournamentResponse.data?.tournament) {
+      throw new Error('Failed to fetch tournament data');
+    }
+
+    const tournamentData = tournamentResponse.data.tournament;
+
+    // Update status dan started_at turnamen di database
+    const { error: updateError } = await supabase
       .from('bracket_tournaments')
-      .update({
+      .update({ 
         state: 'underway',
-        started_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        started_at: getCurrentWIBTime(),
+        updated_at: getCurrentWIBTime()
       })
-      .eq('challonge_id', id)
-      .select();
+      .eq('challonge_id', tournamentId);
 
-    if (supabaseError) {
-      console.error('Error updating tournament status in database:', supabaseError);
-      return NextResponse.json(challongeResponse.data);
+    if (updateError) {
+      console.error('Error updating tournament state:', updateError);
+      throw new Error('Failed to update tournament state in database');
     }
 
-    // Ambil data pertandingan dari Challonge dan simpan ke database
-    try {
-      const matchesResponse = await axios.get(
-        `${BASE_URL}/tournaments/${id}/matches.json`,
-        {
-          params: {
-            api_key: API_KEY,
-          },
-        }
-      );
-
-      const matches = matchesResponse.data;
-
-      // Simpan setiap pertandingan ke database
-      for (const match of matches) {
-        const matchData = match.match;
-        
-        await supabase
-          .from('bracket_matches')
-          .insert([
-            {
-              id: matchData.id,
-              challonge_id: matchData.id,
-              tournament_id: id,
-              round: matchData.round,
-              player1_id: matchData.player1_id,
-              player2_id: matchData.player2_id,
-              winner_id: matchData.winner_id,
-              loser_id: matchData.loser_id,
-              scores_csv: matchData.scores_csv,
-              state: matchData.state,
-              suggested_play_order: matchData.suggested_play_order
-            }
-          ])
-          .onConflict(['challonge_id', 'tournament_id'])
-          .merge();
-      }
-    } catch (matchError) {
-      console.error('Error saving matches to database:', matchError);
-      // Tidak menghentikan proses karena turnamen sudah dimulai
-    }
-
-    return NextResponse.json({
-      tournament: {
-        ...tournamentData,
-        local_data: supabaseData[0]
-      }
+    return NextResponse.json({ 
+      message: 'Tournament started successfully',
+      tournament: tournamentData
     });
   } catch (error) {
-    console.error('Error starting tournament:', error.response?.data || error.message);
+    console.error('Error starting tournament:', error);
     return NextResponse.json(
-      { error: 'Failed to start tournament' },
-      { status: error.response?.status || 500 }
+      { error: error.message || 'Failed to start tournament' },
+      { status: 500 }
     );
   }
 } 

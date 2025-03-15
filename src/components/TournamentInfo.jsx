@@ -1,4 +1,132 @@
-const TournamentInfo = ({ tournament, title, description, matches = [] }) => {
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+
+const TournamentInfo = ({ tournament, title, description, matches = [], onStartTournament, onFinalizeTournament, isProcessing }) => {
+  const [participantsCount, setParticipantsCount] = useState(0);
+  const [localIsProcessing, setLocalIsProcessing] = useState(false);
+  const [localTournament, setLocalTournament] = useState(tournament);
+
+  // Tambahkan state untuk modal konfirmasi
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [confirmMessage, setConfirmMessage] = useState("");
+  const [confirmTitle, setConfirmTitle] = useState("");
+
+  // Tambahkan komponen ConfirmationModal
+  const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, isProcessing }) => {
+    if (!isOpen) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-[#2b2b2b] rounded-lg p-6 max-w-md w-full mx-4">
+          <h3 className="text-xl font-semibold text-white mb-4">{title}</h3>
+          <p className="text-gray-300 mb-6">{message}</p>
+          <div className="flex justify-end space-x-4">
+            <button
+              onClick={onClose}
+              disabled={isProcessing}
+              className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+            >
+              Batal
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isProcessing}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center"
+            >
+              {isProcessing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                  Memproses...
+                </>
+              ) : (
+                'Konfirmasi'
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Fungsi untuk memperbarui data turnamen
+  const refreshTournamentData = async () => {
+    if (!tournament?.tournament?.id) return;
+
+    try {
+      // Ambil data turnamen terbaru
+      const { data: tournamentData, error: tournamentError } = await supabase
+        .from('bracket_tournaments')
+        .select('*')
+        .eq('challonge_id', tournament.tournament.id)
+        .single();
+
+      if (tournamentError) throw tournamentError;
+
+      setLocalTournament({
+        tournament: {
+          ...tournamentData,
+          id: tournamentData.challonge_id,
+          local_data: tournamentData
+        }
+      });
+
+      // Ambil jumlah peserta
+      const { count } = await supabase
+        .from('bracket_participants')
+        .select('*', { count: 'exact' })
+        .eq('tournament_id', tournament.tournament.id);
+
+      setParticipantsCount(count || 0);
+    } catch (error) {
+      console.error('Error refreshing tournament data:', error);
+    }
+  };
+
+  useEffect(() => {
+    refreshTournamentData();
+
+    // Set interval untuk memperbarui data setiap 5 detik
+    const interval = setInterval(refreshTournamentData, 5000);
+
+    return () => clearInterval(interval);
+  }, [tournament?.tournament?.id]);
+
+  const handleFinalizeTournament = async () => {
+    if (!tournament?.tournament?.id || localIsProcessing) return;
+
+    setConfirmTitle("Selesaikan Turnamen");
+    setConfirmMessage("Apakah Anda yakin ingin menyelesaikan turnamen ini? Aksi ini tidak dapat dibatalkan.");
+    setConfirmAction(() => async () => {
+      setLocalIsProcessing(true);
+      try {
+        const response = await fetch(`/api/challonge/tournaments/${tournament.tournament.id}/finalize`, {
+          method: 'POST'
+        });
+
+        if (!response.ok) {
+          throw new Error('Gagal menyelesaikan turnamen');
+        }
+
+        if (onFinalizeTournament) {
+          onFinalizeTournament();
+        }
+
+        // Reload halaman setelah 2 detik
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+        setShowConfirmModal(false);
+      } catch (error) {
+        console.error('Error finalizing tournament:', error);
+        alert('Gagal menyelesaikan turnamen. Silakan coba lagi.');
+      } finally {
+        setLocalIsProcessing(false);
+      }
+    });
+    setShowConfirmModal(true);
+  };
+
   // Format tanggal
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("id-ID", {
@@ -43,11 +171,42 @@ const TournamentInfo = ({ tournament, title, description, matches = [] }) => {
       <div className="bg-[#363636] p-4 border-b border-[#404040]">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-white">
-            {tournament?.tournament?.name}
+            {localTournament?.tournament?.name}
           </h1>
-          <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(tournament?.tournament?.state)}`}>
-            {getTournamentStatus(tournament?.tournament?.state)}
-          </span>
+          <div className="flex items-center space-x-2">
+            {localTournament?.tournament?.state === "pending" && (
+              <button
+                onClick={onStartTournament}
+                disabled={isProcessing}
+                className={`px-3 py-1 rounded-lg flex items-center space-x-1 ${
+                  isProcessing
+                    ? 'bg-green-600/50 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700'
+                } text-white text-sm`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                </svg>
+                <span>Mulai</span>
+              </button>
+            )}
+            {localTournament?.tournament?.state === "underway" && (
+              <button
+                onClick={handleFinalizeTournament}
+                disabled={localIsProcessing || isProcessing}
+                className={`px-3 py-1 rounded-lg flex items-center space-x-1 ${
+                  localIsProcessing || isProcessing
+                    ? 'bg-red-600/50 cursor-not-allowed'
+                    : 'bg-red-600 hover:bg-red-700'
+                } text-white text-sm`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+                </svg>
+                <span>{localIsProcessing ? 'Menyelesaikan...' : 'Selesai'}</span>
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-gray-400 mt-2 text-sm">{description}</p>
       </div>
@@ -70,7 +229,7 @@ const TournamentInfo = ({ tournament, title, description, matches = [] }) => {
             <div>
               <p className="text-sm text-gray-400">Total Peserta</p>
               <p className="text-base font-bold text-white">
-                {tournament?.tournament?.participants_count || 0}
+                {participantsCount} Peserta
               </p>
             </div>
           </div>
@@ -113,7 +272,27 @@ const TournamentInfo = ({ tournament, title, description, matches = [] }) => {
             <div>
               <p className="text-sm text-gray-400">Tipe Game</p>
               <p className="text-base font-bold text-white">
-                {tournament?.tournament?.game_name || "Tidak Ada"}
+                {localTournament?.tournament?.game_name || "Tidak Ada"}
+              </p>
+            </div>
+          </div>
+
+          {/* Status */}
+          <div className="flex items-center space-x-3">
+            <div className="bg-[#404040] p-2 rounded-lg">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4 text-[#f26522]"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm text-gray-400">Status</p>
+              <p className={`text-base font-bold ${getStatusColor(localTournament?.tournament?.state)}`}>
+                {getTournamentStatus(localTournament?.tournament?.state)}
               </p>
             </div>
           </div>
@@ -137,12 +316,22 @@ const TournamentInfo = ({ tournament, title, description, matches = [] }) => {
             <div>
               <p className="text-sm text-gray-400">Tanggal Dibuat</p>
               <p className="text-base font-bold text-white">
-                {formatDate(tournament?.tournament?.created_at)}
+                {formatDate(localTournament?.tournament?.created_at)}
               </p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Tambahkan Modal Konfirmasi */}
+      <ConfirmationModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={confirmAction}
+        title={confirmTitle}
+        message={confirmMessage}
+        isProcessing={localIsProcessing}
+      />
     </div>
   );
 };

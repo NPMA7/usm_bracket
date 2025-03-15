@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { supabase } from '@/lib/supabase';
+import { getCurrentWIBTime } from '@/lib/utils';
 
 const API_KEY = process.env.CHALLONGE_API_KEY;
 const BASE_URL = process.env.CHALLONGE_API_URL;
@@ -86,7 +87,7 @@ async function syncBracketWithChallonge(tournamentId, localTournament) {
         state: tournamentData.state,
         participants_count: tournamentData.participants_count,
         progress_meter: tournamentData.progress_meter,
-        updated_at: new Date().toISOString()
+        updated_at: getCurrentWIBTime()
       })
       .eq('challonge_id', tournamentId);
   } catch (error) {
