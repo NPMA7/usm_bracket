@@ -20,8 +20,8 @@ export default function EditParticipantModal({
   useEffect(() => {
     if (participant) {
       setFormData({
-        name: participant.name || '',
-        email: participant.email || '',
+        name: participant.participant?.name || participant.name || '',
+        email: participant.participant?.email || participant.email || '',
       });
     }
   }, [participant]);
@@ -40,7 +40,13 @@ export default function EditParticipantModal({
     setError('');
 
     try {
-      const response = await fetch(`/api/challonge/participants/${participant.id}`, {
+      const participantId = participant.participant?.id || participant.participant?.challonge_id || participant.id;
+      
+      if (!participantId) {
+        throw new Error('ID peserta tidak valid');
+      }
+
+      const response = await fetch(`/api/challonge/participants/${participantId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -110,7 +116,6 @@ export default function EditParticipantModal({
             onChange={handleChange}
             className="w-full px-4 py-2 bg-[#3b3b3b] border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-[#f26522] focus:ring-1 focus:ring-[#f26522]"
             placeholder="Masukkan email peserta"
-            required
           />
         </div>
 

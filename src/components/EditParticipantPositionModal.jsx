@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 
 export default function EditParticipantPositionModal({ isOpen, onClose, tournament, participants: initialParticipants, onPositionsUpdated }) {
   const [participants, setParticipants] = useState([]);
+  const [initialParticipantsCopy, setInitialParticipantsCopy] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -15,35 +16,59 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
     setIsBrowser(true);
   }, []);
 
+  // Simpan salinan data awal saat modal pertama kali dibuka
   useEffect(() => {
-    if (isOpen && initialParticipants) {
+    if (isOpen && initialParticipants && !initialParticipantsCopy) {
+      // Simpan salinan data awal
+      setInitialParticipantsCopy(initialParticipants);
+      
       // Format participants data
-      const formattedParticipants = initialParticipants.map(p => ({
-            participant: {
-          id: p.id,
-          name: p.name,
-          seed: p.seed || 1,
-          display_name: p.name
-        }
-      }));
+      const formattedParticipants = initialParticipants.map(p => {
+        // Handle both formats: direct object or nested participant object
+        const participantData = p.participant || p;
+        return {
+          participant: {
+            id: participantData.id || participantData.challonge_id,
+            name: participantData.name,
+            seed: participantData.seed || 1,
+            display_name: participantData.name
+          }
+        };
+      });
       setParticipants(formattedParticipants);
       setLoading(false);
+    } else if (!isOpen) {
+      // Reset salinan data saat modal ditutup
+      setInitialParticipantsCopy(null);
     }
-  }, [isOpen, initialParticipants]);
+  }, [isOpen, initialParticipants, initialParticipantsCopy]);
+
+  // Jangan update participants saat modal terbuka jika initialParticipants berubah
+  useEffect(() => {
+    if (isOpen && initialParticipantsCopy) {
+      // Gunakan salinan data yang disimpan, bukan data terbaru
+      return () => {
+        // Cleanup function akan dijalankan saat modal ditutup
+      };
+    }
+  }, [isOpen, initialParticipantsCopy]);
 
   const updateSeed = (participantId, newSeed) => {
+    // Izinkan nilai kosong saat mengedit dan simpan sebagai string untuk mencegah konversi otomatis
+    const seedValue = newSeed === '' ? '' : newSeed;
+    
     setParticipants(prevParticipants => 
       prevParticipants.map(p => {
         if (p.participant.id === participantId) {
-        return {
-          ...p,
-          participant: {
-            ...p.participant,
-            seed: newSeed
-          }
-        };
-      }
-      return p;
+          return {
+            ...p,
+            participant: {
+              ...p.participant,
+              seed: seedValue
+            }
+          };
+        }
+        return p;
       })
     );
   };
@@ -54,8 +79,15 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
     setError('');
     
     try {
-      // Filter peserta yang valid
-      const validParticipants = participants.filter(p => p.participant && p.participant.id);
+      // Filter peserta yang valid dan pastikan semua seed adalah angka
+      const validParticipants = participants.map(p => ({
+        ...p,
+        participant: {
+          ...p.participant,
+          // Pastikan seed adalah angka, default ke 1 jika kosong
+          seed: p.participant.seed === '' ? 1 : parseInt(p.participant.seed) || 1
+        }
+      })).filter(p => p.participant && p.participant.id);
       
       if (validParticipants.length === 0) {
         throw new Error('Tidak ada peserta valid untuk disimpan');
@@ -87,16 +119,20 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
       await Promise.all(savePromises);
       setSuccess('Posisi peserta berhasil disimpan');
       
+      // Panggil callback untuk memperbarui posisi dan refresh bracket
       if (typeof onPositionsUpdated === 'function') {
+        // Beri tahu parent component bahwa posisi telah diperbarui
+        // Parent component akan menangani refresh bracket
         onPositionsUpdated();
       }
       
+      // Tutup modal setelah 1.5 detik
       setTimeout(() => {
         onClose();
       }, 1500);
     } catch (err) {
       console.error('Error saat menyimpan posisi peserta:', err);
-      setError(`Gagal menyimpan posisi peserta: ${err.message}`);
+      setError(err.message);
     } finally {
       setIsSaving(false);
     }
@@ -151,18 +187,18 @@ export default function EditParticipantPositionModal({ isOpen, onClose, tourname
                 >
                   <div className="flex items-center space-x-4">
                     <div className="bg-[#f26522] text-white rounded-full w-8 h-8 flex items-center justify-center">
-                      {p.participant.seed}
-                        </div>
+                      {typeof p.participant.seed === 'number' ? p.participant.seed : '?'}
+                    </div>
                     <span className="text-white">{p.participant.name}</span>
-                      </div>
-                        <input
-                          type="number"
-                          min="1"
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
                     value={p.participant.seed}
-                    onChange={(e) => updateSeed(p.participant.id, parseInt(e.target.value) || 1)}
+                    onChange={(e) => updateSeed(p.participant.id, e.target.value)}
                     className="w-20 px-3 py-1 bg-[#2b2b2b] border border-gray-600 rounded text-white text-center"
-                        />
-                      </div>
+                  />
+                </div>
               ))}
             </div>
           )}

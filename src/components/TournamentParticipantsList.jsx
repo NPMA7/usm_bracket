@@ -28,15 +28,15 @@ const TournamentParticipantsList = ({
     <div className="space-y-2">
       {participants.map((participant) => (
         <div
-          key={participant.id}
+          key={participant.participant?.id || participant.participant?.challonge_id || participant.id}
           className="bg-[#3b3b3b] rounded-lg p-3 hover:bg-[#404040] transition-colors"
         >
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-2">
-              <h3 className="text-base font-medium text-white">{participant.name}</h3>
-              {participant.final_rank && (
+              <h3 className="text-base font-medium text-white">{participant.participant?.name || participant.name}</h3>
+              {(participant.participant?.final_rank || participant.final_rank) && (
                 <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-900/50 text-blue-400">
-                  #{participant.final_rank}
+                  #{participant.participant?.final_rank || participant.final_rank}
                 </span>
               )}
             </div>

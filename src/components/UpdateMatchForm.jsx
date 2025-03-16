@@ -8,13 +8,15 @@ const UpdateMatchForm = ({
   onUpdateMatch,
   onReopenMatch,
   isProcessing,
-  onClose
+  onClose,
+  tournament
 }) => {
   if (!selectedMatch) return null;
 
   const player1Name = getParticipantName(selectedMatch.match.player1_id);
   const player2Name = getParticipantName(selectedMatch.match.player2_id);
   const isComplete = selectedMatch.match.state === "complete";
+  const isTournamentComplete = tournament?.tournament?.state === "complete";
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -103,24 +105,28 @@ const UpdateMatchForm = ({
                 <div key={index} className="flex items-center space-x-4">
                   <span className="text-gray-400 text-sm">Set {index + 1}</span>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={set.player1}
-                    onChange={(e) =>
-                      onSetChange(index, "player1", e.target.value === '' ? 0 : parseInt(e.target.value))
-                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Izinkan nilai kosong saat mengedit
+                      onSetChange(index, "player1", value === '' ? '' : parseInt(value) || 0);
+                    }}
                     disabled={isComplete || isProcessing}
-                    min="0"
                     className="bg-[#3b3b3b] text-white px-3 py-2 rounded-lg w-20 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   <span className="text-gray-400">-</span>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={set.player2}
-                    onChange={(e) =>
-                      onSetChange(index, "player2", e.target.value === '' ? 0 : parseInt(e.target.value))
-                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Izinkan nilai kosong saat mengedit
+                      onSetChange(index, "player2", value === '' ? '' : parseInt(value) || 0);
+                    }}
                     disabled={isComplete || isProcessing}
-                    min="0"
                     className="bg-[#3b3b3b] text-white px-3 py-2 rounded-lg w-20 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   {!isComplete && scores.length > 1 && (
@@ -157,7 +163,7 @@ const UpdateMatchForm = ({
             >
               Batal
             </button>
-            {isComplete ? (
+            {isComplete && !isTournamentComplete ? (
               <button
                 onClick={() => onReopenMatch(selectedMatch)}
                 disabled={isProcessing}
@@ -177,7 +183,7 @@ const UpdateMatchForm = ({
                 </svg>
                 {isProcessing ? "Membuka Kembali..." : "Buka Kembali"}
               </button>
-            ) : (
+            ) : !isComplete ? (
               <button
                 onClick={() => {
                   onUpdateMatch();
@@ -199,6 +205,10 @@ const UpdateMatchForm = ({
                 </svg>
                 {isProcessing ? "Menyimpan..." : "Simpan"}
               </button>
+            ) : (
+              <div className="text-gray-400 italic">
+                Pertandingan tidak dapat diubah karena turnamen telah selesai
+              </div>
             )}
           </div>
         </div>

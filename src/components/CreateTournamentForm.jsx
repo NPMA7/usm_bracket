@@ -32,7 +32,6 @@ const CreateTournamentForm = ({ onTournamentCreated }) => {
 
       const data = await response.json();
       onTournamentCreated();
-      router.push(`/admin/tournament/${data.tournament.id}`);
     } catch (err) {
       setError(err.message);
     } finally {

@@ -25,8 +25,12 @@ export default function EditTournamentActionsModal({ isOpen, onClose, tournament
     setError('');
 
     try {
-      const response = await fetch(`/api/challonge/tournaments/${tournament.id}/reset`, {
+      const response = await fetch(`/api/challonge/${tournament.id}`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'reset' }),
       });
 
       if (!response.ok) {
@@ -52,7 +56,7 @@ export default function EditTournamentActionsModal({ isOpen, onClose, tournament
     setError('');
 
     try {
-      const response = await fetch(`/api/challonge/tournaments/${tournament.id}/delete`, {
+      const response = await fetch(`/api/challonge/${tournament.id}`, {
         method: 'DELETE',
       });
 

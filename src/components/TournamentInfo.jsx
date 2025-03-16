@@ -101,8 +101,12 @@ const TournamentInfo = ({ tournament, title, description, matches = [], onStartT
     setConfirmAction(() => async () => {
       setLocalIsProcessing(true);
       try {
-        const response = await fetch(`/api/challonge/tournaments/${tournament.tournament.id}/finalize`, {
-          method: 'POST'
+        const response = await fetch(`/api/challonge/${tournament.tournament.id}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action: 'finalize' }),
         });
 
         if (!response.ok) {

@@ -18,8 +18,12 @@ export default function StartTournamentButton({ tournamentId, onTournamentStarte
     
     try {
       // Mulai turnamen di Challonge terlebih dahulu
-      const response = await fetch(`/api/challonge/tournaments/${tournamentId}/start`, {
-        method: 'POST'
+      const response = await fetch(`/api/challonge/${tournamentId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'start' }),
       });
 
       if (!response.ok) {
@@ -40,8 +44,7 @@ export default function StartTournamentButton({ tournamentId, onTournamentStarte
         .update({
           state: 'underway',
           started_at: getCurrentWIBTime(),
-          updated_at: getCurrentWIBTime(),
-          participants_count: count || 0
+          updated_at: getCurrentWIBTime()
         })
         .eq('challonge_id', tournamentId);
       

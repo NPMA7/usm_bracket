@@ -37,7 +37,6 @@ export async function POST(request) {
           game_name: tournamentData.game_name || '',
           description: tournamentData.description || '',
           state: tournamentData.state,
-          participants_count: tournamentData.participants_count || 0,
           progress_meter: tournamentData.progress_meter || 0,
           started_at: tournamentData.started_at,
           completed_at: tournamentData.completed_at,
@@ -114,7 +113,6 @@ export async function GET(request) {
             .from('bracket_tournaments')
             .update({
               state: challongeData.state,
-              participants_count: challongeData.participants_count,
               progress_meter: challongeData.progress_meter,
               started_at: challongeData.started_at,
               completed_at: challongeData.completed_at,
@@ -161,7 +159,6 @@ export async function GET(request) {
               game_name: tournamentData.game_name || '',
               description: tournamentData.description || '',
               state: tournamentData.state,
-              participants_count: tournamentData.participants_count || 0,
               progress_meter: tournamentData.progress_meter || 0,
               started_at: tournamentData.started_at,
               completed_at: tournamentData.completed_at,
@@ -236,7 +233,6 @@ async function syncTournamentsWithChallonge(localTournaments) {
           .from('bracket_tournaments')
           .update({
             state: tournament.tournament.state,
-            participants_count: tournament.tournament.participants_count,
             progress_meter: tournament.tournament.progress_meter,
             started_at: tournament.tournament.started_at,
             completed_at: tournament.tournament.completed_at,

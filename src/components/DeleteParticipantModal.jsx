@@ -18,8 +18,14 @@ export default function DeleteParticipantModal({
     setError('');
 
     try {
+      const participantId = participant.participant?.id || participant.participant?.challonge_id || participant.id;
+      
+      if (!participantId) {
+        throw new Error('ID peserta tidak valid');
+      }
+
       const response = await fetch(
-        `/api/challonge/participants/${participant.id}?tournamentId=${tournamentId}`,
+        `/api/challonge/participants/${participantId}?tournamentId=${tournamentId}`,
         {
           method: 'DELETE',
         }
@@ -31,7 +37,7 @@ export default function DeleteParticipantModal({
       }
 
       if (onParticipantDeleted) {
-        onParticipantDeleted(participant.id);
+        onParticipantDeleted(participantId);
       }
 
       onClose();

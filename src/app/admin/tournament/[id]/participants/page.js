@@ -20,6 +20,7 @@ export default function TournamentParticipants(props) {
   const id = params.id;
   const [tournament, setTournament] = useState(null);
   const [participants, setParticipants] = useState([]);
+  const [previousParticipantsCount, setPreviousParticipantsCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -177,19 +178,17 @@ export default function TournamentParticipants(props) {
       return;
     }
 
-    // Jangan jalankan interval jika modal edit posisi sedang terbuka
-    if (positionModalOpen) {
-      return;
-    }
-
-    // Interval untuk standings
+    // Interval untuk standings - tetap berjalan meskipun modal terbuka
     const standingsIntervalId = setInterval(() => {
       fetchStandingsQuiet(id);
-    }, 5000); // Diubah menjadi 5 detik
+    }, 5000);
 
-    // Interval untuk daftar peserta
+    // Interval untuk daftar peserta - tetap berjalan, tapi fungsi fetchParticipants akan memeriksa apakah modal terbuka
     const participantsIntervalId = setInterval(() => {
+      // Jangan jalankan fetchParticipants sama sekali jika modal posisi sedang terbuka
+      if (!positionModalOpen) {
       fetchParticipants();
+      }
     }, 5000);
 
     return () => {
@@ -253,6 +252,12 @@ export default function TournamentParticipants(props) {
 
   const fetchParticipants = async () => {
     try {
+      // Jangan perbarui data peserta jika modal posisi sedang terbuka
+      if (positionModalOpen) {
+        console.log("Modal posisi terbuka, tidak memperbarui data peserta");
+        return;
+      }
+
         const { data: participantsData, error: participantsError } = await supabase
           .from('bracket_participants')
           .select('*')
@@ -263,19 +268,37 @@ export default function TournamentParticipants(props) {
           throw new Error("Gagal mengambil data peserta dari database");
         }
 
+      // Format data untuk kompatibilitas dengan komponen yang ada
         const formattedParticipants = participantsData.map(participant => ({
+        participant: {
+          ...participant,
           id: participant.challonge_id,
-          participant_id: participant.challonge_id,
-          name: participant.name || "",
-          seed: participant.seed,
-          final_rank: participant.final_rank,
-          original_data: participant
-        }));
-
+          tournament_id: participant.tournament_id,
+          local_data: participant
+        }
+      }));
+      
+      // Simpan jumlah peserta sebelumnya sebelum memperbarui state
+      const currentCount = participants.length;
+      const newCount = formattedParticipants.length;
+      
+      // Update state peserta
         setParticipants(formattedParticipants);
+      
+      // Jika jumlah peserta berubah, perbarui juga data turnamen
+      if (currentCount !== newCount && tournament?.tournament) {
+        // Update tournament data dengan jumlah peserta baru
+        const updatedTournament = {
+          ...tournament,
+          tournament: {
+            ...tournament.tournament,
+            participants_count: newCount
+          }
+        };
+        setTournament(updatedTournament);
+      }
       } catch (err) {
-      console.error('Participants Error:', err);
-      throw err;
+      console.error('Error fetching participants:', err);
     }
   };
 
@@ -393,8 +416,12 @@ export default function TournamentParticipants(props) {
     setConfirmAction(() => async () => {
       setIsProcessing(true);
       try {
-        const response = await fetch(`/api/challonge/tournaments/${id}/shuffle`, {
+        const response = await fetch(`/api/challonge/${id}`, {
           method: "POST",
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action: 'shuffle' }),
         });
 
         if (!response.ok) {
@@ -404,10 +431,24 @@ export default function TournamentParticipants(props) {
         setShuffleSuccess(true);
         setTimeout(() => setShuffleSuccess(false), 3000);
         
+        // Refresh bracket dengan animasi fade
+        setIsRefreshingBracket(true);
+        setBracketOpacity(0);
+        await new Promise(resolve => setTimeout(resolve, 300));
         setBracketImageKey((prevKey) => prevKey + 1);
+        setBracketOpacity(1);
+        
+        // Refresh data peserta dan standings
+        await fetchParticipants();
         await fetchStandings(id);
+        
         setRefreshTrigger((prev) => prev + 1);
         setShowConfirmModal(false);
+        
+        // Selesaikan animasi refresh
+        setTimeout(() => {
+          setIsRefreshingBracket(false);
+        }, 300);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -418,16 +459,31 @@ export default function TournamentParticipants(props) {
   };
 
   const handleEditPositionSuccess = async () => {
+    // Refresh bracket dengan animasi fade
+    setIsRefreshingBracket(true);
+    setBracketOpacity(0);
+    await new Promise(resolve => setTimeout(resolve, 300));
     setBracketImageKey((prevKey) => prevKey + 1);
-    await Promise.all([
-      fetchParticipants(),
-      fetchStandings(id)
-    ]);
+    setBracketOpacity(1);
+    
+    // Refresh data peserta
+    await fetchParticipants();
+    
+    // Tutup modal
     setPositionModalOpen(false);
+    
+    // Selesaikan animasi refresh
+    setTimeout(() => {
+      setIsRefreshingBracket(false);
+    }, 300);
   };
 
   const handleParticipantAdded = () => {
     setRefreshTrigger((prev) => prev + 1);
+    // Refresh bracket setelah peserta ditambahkan
+    setTimeout(() => {
+      handleRefreshBracket();
+    }, 1000); // Tunggu 1 detik untuk memastikan data sudah diperbarui
   };
 
   const handleEditClick = (participant) => {
@@ -445,8 +501,25 @@ export default function TournamentParticipants(props) {
   };
 
   const handlePositionsUpdated = () => {
+    // Refresh bracket dengan animasi fade
+    setIsRefreshingBracket(true);
+    setBracketOpacity(0);
+    setTimeout(async () => {
+      setBracketImageKey((prevKey) => prevKey + 1);
+      setBracketOpacity(1);
+      
+      // Refresh data
     setRefreshTrigger((prev) => prev + 1);
+      await fetchParticipants();
+      
+      // Tutup modal
     setPositionModalOpen(false);
+      
+      // Selesaikan animasi refresh
+      setTimeout(() => {
+        setIsRefreshingBracket(false);
+      }, 300);
+    }, 300);
   };
 
   const handleParticipantUpdated = () => {
@@ -457,6 +530,10 @@ export default function TournamentParticipants(props) {
   const handleParticipantDeleted = () => {
     setRefreshTrigger((prev) => prev + 1);
     setDeleteModalOpen(false);
+    // Refresh bracket setelah peserta dihapus
+    setTimeout(() => {
+      handleRefreshBracket();
+    }, 1000); // Tunggu 1 detik untuk memastikan data sudah diperbarui
   };
 
   const handleStartTournament = async () => {
@@ -467,8 +544,12 @@ export default function TournamentParticipants(props) {
     setConfirmAction(() => async () => {
       setIsProcessing(true);
       try {
-        const response = await fetch(`/api/challonge/tournaments/${id}/start`, {
+        const response = await fetch(`/api/challonge/${id}`, {
           method: "POST",
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action: 'start' }),
         });
 
         if (!response.ok) {
@@ -495,8 +576,12 @@ export default function TournamentParticipants(props) {
     setConfirmAction(() => async () => {
       setIsProcessing(true);
       try {
-        const response = await fetch(`/api/challonge/tournaments/${id}/finalize`, {
+        const response = await fetch(`/api/challonge/${id}`, {
           method: "POST",
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action: 'finalize' }),
         });
 
         if (!response.ok) {
@@ -515,15 +600,129 @@ export default function TournamentParticipants(props) {
   };
 
   const handleRefreshBracket = async () => {
+    // Hindari multiple refresh bersamaan
+    if (isRefreshingBracket) return;
+    
+    console.log('Merefresh bracket...');
     setIsRefreshingBracket(true);
     setBracketOpacity(0);
+    
+    try {
+      // Tunggu animasi fade out
     await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Increment key untuk memaksa komponen BracketImage me-render ulang
     setBracketImageKey(prev => prev + 1);
+      
+      // Refresh data dari server
+      if (id) {
+        // Refresh data turnamen dan peserta
+        const { data: tournamentData } = await supabase
+          .from('bracket_tournaments')
+          .select('*')
+          .eq('challonge_id', id)
+          .single();
+          
+        if (tournamentData) {
+          // Update tournament data dengan data terbaru
+          const formattedTournament = {
+            tournament: {
+              ...tournamentData,
+              id: tournamentData.challonge_id,
+              challonge_id: tournamentData.challonge_id,
+              local_data: tournamentData
+            }
+          };
+          setTournament(formattedTournament);
+        }
+        
+        // Refresh data peserta
+        await fetchParticipants();
+      }
+      
+      // Tampilkan bracket dengan animasi fade in
     setBracketOpacity(1);
+    } catch (error) {
+      console.error('Error refreshing bracket:', error);
+    } finally {
+      // Selesaikan animasi refresh
     setTimeout(() => {
       setIsRefreshingBracket(false);
     }, 300);
+    }
   };
+
+  // Tambahkan useEffect untuk memantau perubahan jumlah peserta
+  useEffect(() => {
+    // Jika jumlah peserta berubah, refresh gambar bracket
+    if (previousParticipantsCount !== 0 && previousParticipantsCount !== participants.length) {
+      console.log(`Jumlah peserta berubah dari ${previousParticipantsCount} menjadi ${participants.length}, me-refresh bracket`);
+      handleRefreshBracket();
+    }
+    
+    // Update jumlah peserta sebelumnya
+    setPreviousParticipantsCount(participants.length);
+  }, [participants.length]);
+
+  useEffect(() => {
+    if (!id) return;
+
+    // Setup realtime subscription untuk memantau perubahan pada tabel bracket_participants
+    const participantsSubscription = supabase
+      .channel('bracket_participants_changes')
+      .on('postgres_changes', {
+        event: '*', // Listen untuk semua event (INSERT, UPDATE, DELETE)
+        schema: 'public',
+        table: 'bracket_participants',
+        filter: `tournament_id=eq.${id}` // Filter hanya untuk turnamen ini
+      }, (payload) => {
+        console.log('Perubahan terdeteksi pada tabel bracket_participants:', payload);
+        
+        // Refresh data peserta
+        fetchParticipants();
+        
+        // Jika ada penambahan atau penghapusan peserta, refresh bracket
+        if (payload.eventType === 'INSERT' || payload.eventType === 'DELETE') {
+          setTimeout(() => {
+            handleRefreshBracket();
+          }, 1000);
+        }
+        
+        // Jika ada perubahan seed (UPDATE), refresh bracket
+        if (payload.eventType === 'UPDATE') {
+          const oldRecord = payload.old || {};
+          const newRecord = payload.new || {};
+          
+          // Cek apakah seed berubah
+          if (oldRecord.seed !== newRecord.seed) {
+            console.log('Perubahan seed terdeteksi, me-refresh bracket');
+            setTimeout(() => {
+              handleRefreshBracket();
+            }, 1000);
+          }
+        }
+      })
+      .subscribe();
+
+    // Cleanup subscription saat komponen unmount
+    return () => {
+      supabase.removeChannel(participantsSubscription);
+    };
+  }, [id]);
+
+  // Tambahkan useEffect untuk memantau perubahan pada standings
+  useEffect(() => {
+    // Jika standings berubah dan tidak kosong, refresh bracket
+    if (standings.length > 0) {
+      console.log('Standings berubah, me-refresh bracket');
+      // Gunakan timeout untuk menghindari terlalu banyak refresh
+      const timeoutId = setTimeout(() => {
+        handleRefreshBracket();
+      }, 1000);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [JSON.stringify(standings)]);
 
   if (isLoading) {
     return (

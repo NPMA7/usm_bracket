@@ -85,7 +85,6 @@ async function syncBracketWithChallonge(tournamentId, localTournament) {
         live_image_url: tournamentData.live_image_url,
         full_challonge_url: tournamentData.full_challonge_url,
         state: tournamentData.state,
-        participants_count: tournamentData.participants_count,
         progress_meter: tournamentData.progress_meter,
         updated_at: getCurrentWIBTime()
       })

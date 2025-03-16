@@ -8,7 +8,7 @@ const BASE_URL = process.env.CHALLONGE_API_URL;
 // Fungsi untuk mengupdate peserta
 export async function PUT(request, { params }) {
   try {
-    const id = params.id;
+    const id = await params.id;
     const body = await request.json();
     const { tournamentId, name, seed } = body;
 
@@ -72,7 +72,7 @@ export async function PUT(request, { params }) {
 // Fungsi untuk menghapus peserta
 export async function DELETE(request, { params }) {
   try {
-    const id = params.id;
+    const id = await params.id;
     const { searchParams } = new URL(request.url);
     const tournamentId = searchParams.get('tournamentId');
 

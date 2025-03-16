@@ -48,9 +48,9 @@ function AdminDashboard() {
         {/* Kartu Selamat Datang */}
         <WelcomeCard userName={userName} />
         
-        {/* Statistik Dashboard */}
+        {/* Status Koneksi */}
         <div>
-          <h2 className="text-xl font-bold text-white mb-4">Statistik Website</h2>
+          <h2 className="text-xl font-bold text-white mb-4">Status Koneksi</h2>
           <DashboardStats />
         </div>
       </div>

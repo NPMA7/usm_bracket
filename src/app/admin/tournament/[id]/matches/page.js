@@ -131,7 +131,7 @@ export default function TournamentMatches(props) {
       setTournament(formattedTournament);
 
       // Ambil data langsung dari API Challonge
-      const challongeResponse = await fetch(`/api/challonge/tournaments/${id}/matches`);
+      const challongeResponse = await fetch(`/api/challonge/matches/${id}?tournamentId=${id}`);
       if (!challongeResponse.ok) {
         throw new Error("Gagal mengambil data dari API Challonge");
       }
@@ -331,9 +331,13 @@ export default function TournamentMatches(props) {
 
     setIsProcessing(true);
     try {
-      // Format scores untuk API
+      // Format scores untuk API, pastikan nilai kosong dikonversi menjadi 0
       const scoresString = scores
-        .map((set) => `${set.player1}-${set.player2}`)
+        .map((set) => {
+          const player1Score = set.player1 === '' ? 0 : parseInt(set.player1) || 0;
+          const player2Score = set.player2 === '' ? 0 : parseInt(set.player2) || 0;
+          return `${player1Score}-${player2Score}`;
+        })
         .join(",");
 
       // Tentukan pemenang berdasarkan skor
@@ -353,7 +357,7 @@ export default function TournamentMatches(props) {
       }
 
       // Update match di Challonge API
-      const response = await fetch(`/api/challonge/tournaments/${id}/matches/${selectedMatch.match.id}`, {
+      const response = await fetch(`/api/challonge/matches/${selectedMatch.match.id}?tournamentId=${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -394,21 +398,21 @@ export default function TournamentMatches(props) {
       setIsProcessing(true);
       try {
        
-
-        const response = await fetch(`/api/challonge/tournaments/${id}/matches/${match.match.id}/reopen`, {
+        const response = await fetch(`/api/challonge/matches/${match.match.id}?tournamentId=${id}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-          }
+          },
+          body: JSON.stringify({
+            action: 'reopen'
+          })
         });
-
 
         if (!response.ok) {
           const errorText = await response.text();
           console.error('Error reopening match:', errorText);
           throw new Error(`Gagal membuka kembali pertandingan: ${errorText}`);
         }
-
      
         await refreshData();
         
@@ -434,18 +438,16 @@ export default function TournamentMatches(props) {
     setConfirmAction(() => async () => {
     setIsProcessing(true);
     try {
-      const { data, error } = await supabase
-        .from('bracket_tournaments')
-        .update({
-          state: 'complete',
-            completed_at: getCurrentWIBTime(),
-            updated_at: getCurrentWIBTime()
-        })
-        .eq('challonge_id', id)
-        .select();
+        const response = await fetch(`/api/challonge/${id}`, {
+          method: "POST",
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action: 'finalize' }),
+        });
 
-      if (error) {
-        throw new Error("Gagal menyelesaikan turnamen di database");
+        if (!response.ok) {
+          throw new Error("Gagal menyelesaikan turnamen");
       }
 
       window.location.href = `/tournament/${id}`;
@@ -600,6 +602,7 @@ export default function TournamentMatches(props) {
                 onReopenMatch={handleReopenMatch}
                 isProcessing={isProcessing}
                 onClose={handleCloseModal}
+                tournament={tournament}
               />
                 </div>
             )}

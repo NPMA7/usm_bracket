@@ -31,7 +31,7 @@ export default function TournamentOptions() {
     initialFetch();
     const interval = setInterval(() => {
       refreshData();
-    }, 5000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, []);
