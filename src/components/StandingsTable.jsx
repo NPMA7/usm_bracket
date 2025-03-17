@@ -40,9 +40,8 @@ const StandingsTable = ({ standings, isLoading }) => {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-700">
-          {standings.map((item, index) => {
-            const participant = item.participant;
-            const rank = index + 1;
+          {standings.map((participant, index) => {
+            const rank = participant.final_rank || index + 1;
             const name = participant.name || "Unnamed";
             const matchesPlayed = participant.matches_played || 0;
             const wins = participant.wins || 0;

@@ -26,45 +26,46 @@ const FinalResultBox = ({ standings }) => {
               fill="currentColor"
             />
           </svg>
-          Final Result
+          Hasil Akhir Turnamen
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {topParticipants.map((participant, index) => {
             const wins = participant.wins || 0;
             const losses = participant.losses || 0;
+            
+            // Tentukan kelas dan gambar medali berdasarkan peringkat
+            let medalClass = "";
+            let medalImg = "";
+            let rankTitle = "";
+            
+            if (index === 0) { // Juara 1
+              medalClass = "bg-gradient-to-r from-[#f26522]/20 to-[#f26522]/5 border border-[#f26522]";
+              medalImg = "https://assets.challonge.com/assets/icon-medal-first-9f45bab2a90d78bf720a8d196bf2dbbf260c4ba65a6e6a22c4e4c19813f7c9f2.svg";
+              rankTitle = "Juara";
+            } else { // Juara 2
+              medalClass = "bg-gradient-to-r from-gray-700/50 to-gray-700/30 border border-gray-600";
+              medalImg = "https://assets.challonge.com/assets/icon-medal-second-db37f62deb0580bc0b59a95cb799e284012340d3225eb8c88c316482f872e98e.svg";
+              rankTitle = "Runner-up";
+            }
 
             return (
               <div
                 key={participant.id}
-                className={`p-6 rounded-lg flex items-center justify-between ${
-                  index === 0
-                    ? "bg-gradient-to-r from-[#f26522]/20 to-[#f26522]/5 border border-[#f26522]"
-                    : "bg-gradient-to-r from-gray-800/50 to-gray-800/30 border border-gray-700"
-                }`}
+                className={`p-6 rounded-lg flex items-center justify-between ${medalClass}`}
               >
                 <div className="flex items-center space-x-4">
-                  {index === 0 ? (
-                    <div className="w-12 h-12 flex items-center justify-center">
-                      <img
-                        src="https://assets.challonge.com/assets/icon-medal-first-9f45bab2a90d78bf720a8d196bf2dbbf260c4ba65a6e6a22c4e4c19813f7c9f2.svg"
-                        className="h-10 w-10"
-                        alt="Gold medal"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-12 h-12 flex items-center justify-center">
-                      <img
-                        src="https://assets.challonge.com/assets/icon-medal-second-db37f62deb0580bc0b59a95cb799e284012340d3225eb8c88c316482f872e98e.svg"
-                        className="h-10 w-10"
-                        alt="Silver medal"
-                      />
-                    </div>
-                  )}
+                  <div className="w-12 h-12 flex items-center justify-center">
+                    <img
+                      src={medalImg}
+                      className="h-10 w-10"
+                      alt={`${rankTitle} medal`}
+                    />
+                  </div>
                   <div>
                     <div className="text-lg font-bold text-white">{participant.name}</div>
                     <div className="text-sm text-gray-400 flex items-center mt-1">
                       <span className="font-medium mr-2">
-                        {index === 0 ? "Champion" : "Runner-up"}
+                        {rankTitle}
                       </span>
                       <div className="flex items-center gap-2">
                         <span className="px-2 py-0.5 rounded bg-green-900/50 text-green-400 text-xs">

@@ -121,18 +121,18 @@ export default function TournamentDetail({ params }) {
    */
   const fetchStandingsQuiet = async (tournamentId) => {
     try {
-      // Ambil data peserta
+      // Ambil data peserta langsung dari database
       const { data: participantsData, error: participantsError } = await supabase
         .from('bracket_participants')
         .select('*')
         .eq('tournament_id', tournamentId)
-        .order('seed', { nullsLast: true });
+        .order('final_rank', { nullsLast: true });
 
       if (participantsError) {
         throw new Error("Gagal mengambil data peserta");
       }
 
-      // Ambil data pertandingan
+      // Ambil data pertandingan dari database
       const { data: matchesData, error: matchesError } = await supabase
         .from('bracket_matches')
         .select('*')
@@ -142,17 +142,29 @@ export default function TournamentDetail({ params }) {
         throw new Error("Gagal mengambil data pertandingan");
       }
 
+      // Ambil data turnamen untuk mendapatkan winner_id
+      const { data: tournamentData, error: tournamentError } = await supabase
+        .from('bracket_tournaments')
+        .select('*')
+        .eq('challonge_id', tournamentId)
+        .single();
+
+      if (tournamentError) {
+        throw new Error("Gagal mengambil data turnamen");
+      }
+
+      console.log("Tournament data:", tournamentData); // Tambahkan log untuk debugging
+
       // Format data peserta
       const formattedParticipants = participantsData.map(participant => ({
-        participant: {
-          ...participant,
-          id: participant.challonge_id,
-          tournament_id: participant.tournament_id,
-          wins: 0,
-          losses: 0,
-          matches_played: 0,
-          score_difference: 0
-        }
+        ...participant,
+        id: participant.challonge_id,
+        tournament_id: participant.tournament_id,
+        wins: 0,
+        losses: 0,
+        matches_played: 0,
+        score_difference: 0,
+        name: participant.name
       }));
 
       // Hitung statistik dari pertandingan
@@ -162,17 +174,17 @@ export default function TournamentDetail({ params }) {
           const loser = match.loser_id;
           
           // Update statistik pemenang
-          const winnerStanding = formattedParticipants.find(s => s.participant.id === winner);
+          const winnerStanding = formattedParticipants.find(s => s.id === winner);
           if (winnerStanding) {
-            winnerStanding.participant.wins += 1;
-            winnerStanding.participant.matches_played += 1;
+            winnerStanding.wins += 1;
+            winnerStanding.matches_played += 1;
           }
 
           // Update statistik yang kalah
-          const loserStanding = formattedParticipants.find(s => s.participant.id === loser);
+          const loserStanding = formattedParticipants.find(s => s.id === loser);
           if (loserStanding) {
-            loserStanding.participant.losses += 1;
-            loserStanding.participant.matches_played += 1;
+            loserStanding.losses += 1;
+            loserStanding.matches_played += 1;
           }
 
           // Hitung selisih skor jika ada
@@ -185,25 +197,70 @@ export default function TournamentDetail({ params }) {
             if (winnerStanding && loserStanding) {
               const totalScore1 = scores.reduce((sum, s) => sum + s.score1, 0);
               const totalScore2 = scores.reduce((sum, s) => sum + s.score2, 0);
-              winnerStanding.participant.score_difference += Math.max(totalScore1, totalScore2);
-              loserStanding.participant.score_difference += Math.min(totalScore1, totalScore2);
+              winnerStanding.score_difference += Math.max(totalScore1, totalScore2);
+              loserStanding.score_difference += Math.min(totalScore1, totalScore2);
             }
           }
         }
       });
 
+      // Gunakan final_rank dari database jika tersedia
+      formattedParticipants.forEach(participant => {
+        if (participant.final_rank) {
+          // Pastikan final_rank dari database digunakan
+          console.log(`Participant ${participant.name} has final_rank ${participant.final_rank} from database`);
+        }
+      });
+
+      // Jika turnamen sudah selesai dan memiliki pemenang, pastikan pemenang memiliki final_rank = 1
+      if (tournamentData.state === 'complete') {
+        // Set juara 1 (winner) jika belum ada final_rank
+        if (tournamentData.winner_id) {
+          const winner = formattedParticipants.find(p => p.id === tournamentData.winner_id);
+          if (winner && !winner.final_rank) {
+            winner.final_rank = 1;
+          }
+        }
+        
+        // Set juara 2 (runner-up) jika belum ada final_rank
+        if (tournamentData.runner_up_id) {
+          const runnerUp = formattedParticipants.find(p => p.id === tournamentData.runner_up_id);
+          if (runnerUp && !runnerUp.final_rank) {
+            runnerUp.final_rank = 2;
+          }
+        }
+        
+        // Set juara 3 jika belum ada final_rank
+        if (tournamentData.third_place_id) {
+          const thirdPlace = formattedParticipants.find(p => p.id === tournamentData.third_place_id);
+          if (thirdPlace && !thirdPlace.final_rank) {
+            thirdPlace.final_rank = 3;
+          }
+        }
+      }
+
       // Urutkan standings berdasarkan:
-      // 1. Jumlah kemenangan (descending)
-      // 2. Selisih skor (descending)
-      // 3. Jumlah pertandingan (ascending)
+      // 1. Final rank jika ada
+      // 2. Jumlah kemenangan (descending)
+      // 3. Selisih skor (descending)
+      // 4. Jumlah pertandingan (ascending)
       const sortedStandings = formattedParticipants.sort((a, b) => {
-        if (a.participant.wins !== b.participant.wins) {
-          return b.participant.wins - a.participant.wins;
+        if (a.final_rank && b.final_rank) {
+          return a.final_rank - b.final_rank;
         }
-        if (a.participant.score_difference !== b.participant.score_difference) {
-          return b.participant.score_difference - a.participant.score_difference;
+        if (a.final_rank && !b.final_rank) {
+          return -1;
         }
-        return a.participant.matches_played - b.participant.matches_played;
+        if (!a.final_rank && b.final_rank) {
+          return 1;
+        }
+        if (a.wins !== b.wins) {
+          return b.wins - a.wins;
+        }
+        if (a.score_difference !== b.score_difference) {
+          return b.score_difference - a.score_difference;
+        }
+        return a.matches_played - b.matches_played;
       });
 
       setStandings(sortedStandings);
@@ -387,7 +444,7 @@ export default function TournamentDetail({ params }) {
           />
         )}
 
-        {tournament && tournament.state === "complete" && standings.length > 0 && (
+        {tournament && tournament.state === "complete" && tournament.winner_id && standings.length > 0 && (
           <FinalResultBox standings={standings} />
         )}
 

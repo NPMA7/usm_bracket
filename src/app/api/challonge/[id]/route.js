@@ -158,14 +158,53 @@ export async function DELETE(request, { params }) {
       }
     });
 
-    // Hapus semua data terkait di database lokal
-    await Promise.all([
-      supabase.from('bracket_matches').delete().eq('tournament_id', tournamentId),
-      supabase.from('bracket_participants').delete().eq('tournament_id', tournamentId),
-      supabase.from('bracket_tournaments').delete().eq('challonge_id', tournamentId)
-    ]);
+    // Hapus data terkait di database lokal satu per satu dengan penanganan error
+    try {
+      // Hapus matches terlebih dahulu (foreign key constraint)
+      const { error: matchesError } = await supabase
+        .from('bracket_matches')
+        .delete()
+        .eq('tournament_id', tournamentId);
+      
+      if (matchesError) {
+        console.error('Error deleting matches:', matchesError);
+      }
+      
+      // Hapus participants
+      const { error: participantsError } = await supabase
+        .from('bracket_participants')
+        .delete()
+        .eq('tournament_id', tournamentId);
+      
+      if (participantsError) {
+        console.error('Error deleting participants:', participantsError);
+      }
+      
+      // Hapus tournament
+      const { error: tournamentError } = await supabase
+        .from('bracket_tournaments')
+        .delete()
+        .eq('challonge_id', tournamentId);
+      
+      if (tournamentError) {
+        console.error('Error deleting tournament:', tournamentError);
+        return NextResponse.json(
+          { error: 'Failed to delete tournament data from database' },
+          { status: 500 }
+        );
+      }
+    } catch (dbError) {
+      console.error('Database error during deletion:', dbError);
+      return NextResponse.json(
+        { error: 'Failed to delete tournament data from database' },
+        { status: 500 }
+      );
+    }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true,
+      message: 'Tournament deleted successfully from both Challonge and local database'
+    });
   } catch (error) {
     console.error('Error deleting tournament:', error.response?.data || error.message);
     return NextResponse.json(
@@ -316,13 +355,103 @@ export async function POST(request, { params }) {
         throw new Error('Failed to finalize tournament');
       }
 
-      // Update status turnamen di database
+      // Dapatkan data pertandingan untuk menemukan pemenang turnamen
+      const matchesResponse = await axios.get(
+        `${BASE_URL}/tournaments/${tournamentId}/matches.json`,
+        {
+          params: {
+            api_key: API_KEY,
+          },
+        }
+      );
+
+      let winnerId = null;
+      let winnerName = null;
+      let runnerUpId = null;
+      let runnerUpName = null;
+      let thirdPlaceId = null;
+      let thirdPlaceName = null;
+
+      if (matchesResponse.data && Array.isArray(matchesResponse.data)) {
+        // Cari pertandingan final (biasanya memiliki round tertinggi)
+        const finalMatch = matchesResponse.data.reduce((highest, current) => {
+          return (current.match.round > highest.match.round) ? current : highest;
+        }, matchesResponse.data[0]);
+
+        // Jika ada final match dan memiliki winner_id, dapatkan pemenang
+        if (finalMatch && finalMatch.match.winner_id) {
+          winnerId = finalMatch.match.winner_id;
+          
+          // Runner-up adalah yang kalah di final
+          runnerUpId = finalMatch.match.loser_id;
+
+          // Dapatkan data peserta
+          const participantsResponse = await axios.get(
+            `${BASE_URL}/tournaments/${tournamentId}/participants.json`,
+            {
+              params: {
+                api_key: API_KEY,
+              },
+            }
+          );
+
+          if (participantsResponse.data && Array.isArray(participantsResponse.data)) {
+            // Dapatkan nama pemenang
+            const winner = participantsResponse.data.find(
+              p => p.participant.id === winnerId
+            );
+            if (winner) {
+              winnerName = winner.participant.name;
+            }
+            
+            // Dapatkan nama runner-up
+            const runnerUp = participantsResponse.data.find(
+              p => p.participant.id === runnerUpId
+            );
+            if (runnerUp) {
+              runnerUpName = runnerUp.participant.name;
+            }
+            
+            // Cari juara 3 (yang kalah di semifinal dan bukan runner-up)
+            // Semifinal biasanya adalah round = round final - 1
+            const finalRound = finalMatch.match.round;
+            const semifinalMatches = matchesResponse.data.filter(match => 
+              match.match.round === finalRound - 1 && match.match.state === 'complete'
+            );
+            
+            if (semifinalMatches.length > 0) {
+              for (const semifinalMatch of semifinalMatches) {
+                if (semifinalMatch.match.loser_id && semifinalMatch.match.loser_id !== runnerUpId) {
+                  thirdPlaceId = semifinalMatch.match.loser_id;
+                  
+                  // Dapatkan nama juara 3
+                  const thirdPlace = participantsResponse.data.find(
+                    p => p.participant.id === thirdPlaceId
+                  );
+                  if (thirdPlace) {
+                    thirdPlaceName = thirdPlace.participant.name;
+                    break; // Hanya perlu satu juara 3
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Update status turnamen di database termasuk winner_id dan winner_name
       const { error: updateError } = await supabase
         .from('bracket_tournaments')
         .update({
           state: 'complete',
           completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          winner_id: winnerId,
+          winner_name: winnerName,
+          runner_up_id: runnerUpId,
+          runner_up_name: runnerUpName,
+          third_place_id: thirdPlaceId,
+          third_place_name: thirdPlaceName
         })
         .eq('challonge_id', tournamentId);
 
@@ -360,7 +489,19 @@ export async function POST(request, { params }) {
 
       return NextResponse.json({
         success: true,
-        message: 'Tournament finalized successfully'
+        message: 'Tournament finalized successfully',
+        winner: {
+          id: winnerId,
+          name: winnerName
+        },
+        runnerUp: {
+          id: runnerUpId,
+          name: runnerUpName
+        },
+        thirdPlace: {
+          id: thirdPlaceId,
+          name: thirdPlaceName
+        }
       });
     }
     

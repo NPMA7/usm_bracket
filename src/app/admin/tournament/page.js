@@ -85,13 +85,31 @@ function AdminTournament() {
       const tournamentsResponse = await fetch("/api/challonge");
       const tournamentsData = await tournamentsResponse.json();
 
+      // Ambil jumlah peserta yang akurat untuk setiap turnamen dari database
+      const tournamentsWithCounts = await Promise.all(
+        tournamentsData.map(async (tournament) => {
+          const { count } = await supabase
+            .from('bracket_participants')
+            .select('*', { count: 'exact' })
+            .eq('tournament_id', tournament.tournament.id);
+          
+          return {
+            ...tournament,
+            tournament: {
+              ...tournament.tournament,
+              participants_count: count || 0
+            }
+          };
+        })
+      );
+
       // Hitung total tim terdaftar dari semua turnamen
-      const totalTeams = tournamentsData.reduce((total, tournament) => {
+      const totalTeams = tournamentsWithCounts.reduce((total, tournament) => {
         return total + (tournament.tournament.participants_count || 0);
       }, 0);
 
       // Hitung jumlah turnamen yang sedang berlangsung
-      const activeTournaments = tournamentsData.filter(
+      const activeTournaments = tournamentsWithCounts.filter(
         (t) =>
           t.tournament.state === "underway" || t.tournament.state === "pending"
       ).length;
@@ -99,22 +117,22 @@ function AdminTournament() {
       // Hitung turnamen baru (dibuat dalam 7 hari terakhir)
       const lastWeekDate = new Date();
       lastWeekDate.setDate(lastWeekDate.getDate() - 7);
-      const newTournaments = tournamentsData.filter(
+      const newTournaments = tournamentsWithCounts.filter(
         (t) => new Date(t.tournament.created_at) > lastWeekDate
       ).length;
 
       // Hitung total turnamen
-      const totalTournaments = tournamentsData.length;
+      const totalTournaments = tournamentsWithCounts.length;
 
       // Hitung turnamen dalam 45 hari terakhir
       const last45Days = new Date();
       last45Days.setDate(last45Days.getDate() - 45);
-      const recentTournaments45 = tournamentsData.filter(
+      const recentTournaments45 = tournamentsWithCounts.filter(
         (t) => new Date(t.tournament.created_at) > last45Days
       ).length;
 
       // Hitung turnamen yang sudah selesai
-      const completedTournaments = tournamentsData.filter(
+      const completedTournaments = tournamentsWithCounts.filter(
         (t) => t.tournament.state === "complete"
       ).length;
 
@@ -153,11 +171,11 @@ function AdminTournament() {
           ],
         },
         participantDistribution: {
-          labels: tournamentsData.slice(0, 5).map((t) => t.tournament.name),
+          labels: tournamentsWithCounts.slice(0, 5).map((t) => t.tournament.name),
           datasets: [
             {
               ...prevState.participantDistribution.datasets[0],
-              data: tournamentsData
+              data: tournamentsWithCounts
                 .slice(0, 5)
                 .map((t) => t.tournament.participants_count || 0),
             },
@@ -166,8 +184,8 @@ function AdminTournament() {
       }));
 
       // Format data turnamen terbaru
-      if (tournamentsData && tournamentsData.length > 0) {
-        const sortedTournaments = [...tournamentsData]
+      if (tournamentsWithCounts && tournamentsWithCounts.length > 0) {
+        const sortedTournaments = [...tournamentsWithCounts]
           .sort(
             (a, b) =>
               new Date(b.tournament.created_at) -
@@ -334,7 +352,7 @@ function AdminTournament() {
               <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
             </svg>
           }
-          title="Total Tim"
+          title="Total Peserta (Tim)"
           value={formatNumber(dashboardData.totalTeams)}
           subtitle="Dari semua turnamen"
           bgColor="bg-blue-500/20"

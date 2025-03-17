@@ -42,13 +42,11 @@ export default function TournamentMatches(props) {
 
     // Inisialisasi data standings
     const standingsData = participants.map(p => ({
-      participant: {
-        ...p.participant,
-        wins: 0,
-        losses: 0,
-        matches_played: 0,
-        score_difference: 0
-      }
+      ...p.participant,
+      wins: 0,
+      losses: 0,
+      matches_played: 0,
+      score_difference: 0
     }));
 
     // Hitung statistik dari matches
@@ -58,17 +56,17 @@ export default function TournamentMatches(props) {
         const loser = match.match.loser_id;
         
         // Update statistik pemenang
-        const winnerStanding = standingsData.find(s => s.participant.id === winner);
+        const winnerStanding = standingsData.find(s => s.id === winner);
         if (winnerStanding) {
-          winnerStanding.participant.wins += 1;
-          winnerStanding.participant.matches_played += 1;
+          winnerStanding.wins += 1;
+          winnerStanding.matches_played += 1;
         }
 
         // Update statistik yang kalah
-        const loserStanding = standingsData.find(s => s.participant.id === loser);
+        const loserStanding = standingsData.find(s => s.id === loser);
         if (loserStanding) {
-          loserStanding.participant.losses += 1;
-          loserStanding.participant.matches_played += 1;
+          loserStanding.losses += 1;
+          loserStanding.matches_played += 1;
         }
 
         // Hitung selisih skor jika ada
@@ -81,8 +79,8 @@ export default function TournamentMatches(props) {
           if (winnerStanding && loserStanding) {
             const totalScore1 = scores.reduce((sum, s) => sum + s.score1, 0);
             const totalScore2 = scores.reduce((sum, s) => sum + s.score2, 0);
-            winnerStanding.participant.score_difference += Math.max(totalScore1, totalScore2);
-            loserStanding.participant.score_difference += Math.min(totalScore1, totalScore2);
+            winnerStanding.score_difference += Math.max(totalScore1, totalScore2);
+            loserStanding.score_difference += Math.min(totalScore1, totalScore2);
           }
         }
       }
@@ -93,13 +91,13 @@ export default function TournamentMatches(props) {
     // 2. Selisih skor (descending)
     // 3. Jumlah pertandingan (ascending)
     return standingsData.sort((a, b) => {
-      if (a.participant.wins !== b.participant.wins) {
-        return b.participant.wins - a.participant.wins;
+      if (a.wins !== b.wins) {
+        return b.wins - a.wins;
       }
-      if (a.participant.score_difference !== b.participant.score_difference) {
-        return b.participant.score_difference - a.participant.score_difference;
+      if (a.score_difference !== b.score_difference) {
+        return b.score_difference - a.score_difference;
       }
-      return a.participant.matches_played - b.participant.matches_played;
+      return a.matches_played - b.matches_played;
     });
   };
 
